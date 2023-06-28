@@ -948,5 +948,25 @@ $("document").ready(function () {
                 }
             }
         }
+
+        // Ctrl+Alt, new hotkeys
+        if (event.altKey && event.key == "1") {
+            // Click jailbreak_system button
+            $('#jailbreak_system').trigger('click');
+            $('#jailbreak_system').prop('checked') ? toastr.success(`Jailbreak is Enabled`, '', { timeOut: 600 }) : toastr.warning(`Jailbreak is Disabled`, '', { timeOut: 600 });
+        }
+        if (event.altKey && event.key == "2") {
+            // Click nsfw_toggle button
+            $('#nsfw_toggle').trigger('click');
+            $('#nsfw_toggle').prop('checked') ? toastr.success(`NSFW is Enabled`, '', { timeOut: 600 }) : toastr.warning(`NSFW is Disabled`, '', { timeOut: 600 });
+        }
+        if (event.altKey && event.key == "c") {
+            // Show character menu
+            $('#unimportantYes').trigger('click');
+        }
+        if (event.altKey && event.key == "a") {
+            // Show api settings menu
+            $('#leftNavDrawerIcon').trigger('click');
+        }
     }
 });
