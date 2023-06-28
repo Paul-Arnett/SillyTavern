@@ -21,3 +21,4 @@ secrets.json
 /dist
 poe_device.json
 /backups/
+Start.ps1

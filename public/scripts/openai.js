@@ -219,6 +219,7 @@ function setOpenAIMessages(chat) {
 
         // remove caret return (waste of tokens)
         content = content.replace(/\r/gm, '');
+        content = content.replace(/<thinking>[\s\S]*<\/thinking>\n*/m, ''); // Remove previous <thinking> tags
 
         // Apply the "wrap in quotes" option
         if (role == 'user' && oai_settings.wrap_in_quotes) content = `"${content}"`;

@@ -1062,6 +1062,11 @@ function messageFormatting(mes, ch_name, isSystem, isUser) {
         mes = fixMarkdown(mes);
     }
 
+    // Clean <thinking> tags from message
+    if (this_chid != undefined && !isUser && !isSystem) {
+        mes = mes.replace(/<thinking>[\s\S]*<\/thinking>\n*/m, '')
+    }
+
     if (this_chid != undefined && !isSystem)
         mes = mes.replaceAll("<", "&lt;").replaceAll(">", "&gt;"); //for welcome message
     if ((this_chid === undefined || this_chid === "invalid-safety-id") && !selected_group) {
