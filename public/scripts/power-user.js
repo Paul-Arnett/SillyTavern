@@ -15,10 +15,13 @@ import {
     printCharacters,
     name1,
     name2,
+    replaceCurrentChat,
+    setCharacterId
 } from "../script.js";
-import { favsToHotswap, isMobile } from "./RossAscends-mods.js";
+import { favsToHotswap, isMobile, initMovingUI } from "./RossAscends-mods.js";
 import {
     groups,
+    resetSelectedGroup,
     selected_group,
 } from "./group-chats.js";
 
@@ -308,7 +311,13 @@ function switchMovingUI() {
     const movingUI = localStorage.getItem(storage_keys.movingUI);
     power_user.movingUI = movingUI === null ? false : movingUI == "true";
     $("body").toggleClass("movingUI", power_user.movingUI);
-    scrollChatToBottom();
+    if (power_user.movingUI === true) {
+        initMovingUI()
+        if (power_user.movingUIState) {
+            loadMovingUIState();
+        }
+    };
+    //scrollChatToBottom();
 }
 
 function noShadows() {
@@ -647,7 +656,10 @@ function loadPowerUserSettings(settings, data) {
 }
 
 function loadMovingUIState() {
-    if (isMobile() === false && power_user.movingUIState) {
+    if (isMobile() === false
+        && power_user.movingUIState
+        && power_user.movingUI === true) {
+        console.debug('loading movingUI state')
         for (var elmntName of Object.keys(power_user.movingUIState)) {
             var elmntState = power_user.movingUIState[elmntName];
             try {
@@ -663,7 +675,7 @@ function loadMovingUIState() {
             }
         }
     } else {
-        console.debug('skipping movingUI state load for mobile')
+        console.debug('skipping movingUI state load')
         return
     }
 }
@@ -916,69 +928,43 @@ async function saveTheme() {
 }
 
 function resetMovablePanels() {
-    document.getElementById("sheld").style.top = '';
-    document.getElementById("sheld").style.left = '';
-    document.getElementById("sheld").style.bottom = '';
-    document.getElementById("sheld").style.right = '';
-    document.getElementById("sheld").style.height = '';
-    document.getElementById("sheld").style.width = '';
-    document.getElementById("sheld").style.margin = '';
+    const panelIds = [
+        'sheld',
+        'left-nav-panel',
+        'right-nav-panel',
+        'WorldInfo',
+        'floatingPrompt',
+        'expression-holder',
+    ];
 
+    const panelStyles = ['top', 'left', 'right', 'bottom', 'height', 'width', 'margin',];
 
-    document.getElementById("left-nav-panel").style.top = '';
-    document.getElementById("left-nav-panel").style.left = '';
-    document.getElementById("left-nav-panel").style.height = '';
-    document.getElementById("left-nav-panel").style.width = '';
-    document.getElementById("left-nav-panel").style.margin = '';
+    panelIds.forEach((id) => {
+        const panel = document.getElementById(id);
 
-    document.getElementById("right-nav-panel").style.top = '';
-    document.getElementById("right-nav-panel").style.left = '';
-    document.getElementById("right-nav-panel").style.right = '';
-    document.getElementById("right-nav-panel").style.height = '';
-    document.getElementById("right-nav-panel").style.width = '';
-    document.getElementById("right-nav-panel").style.margin = '';
+        if (panel) {
+            panelStyles.forEach((style) => {
+                panel.style[style] = '';
+            });
+        }
+    });
 
-    if ($("#expression-holder")) {
-        document.getElementById("expression-holder").style.top = '';
-        document.getElementById("expression-holder").style.left = '';
-        document.getElementById("expression-holder").style.right = '';
-        document.getElementById("expression-holder").style.bottom = '';
-        document.getElementById("expression-holder").style.height = '';
-        document.getElementById("expression-holder").style.width = '';
-        document.getElementById("expression-holder").style.margin = '';
+    const zoomedAvatar = document.querySelector('.zoomed_avatar');
+    if (zoomedAvatar) {
+        panelStyles.forEach((style) => {
+            zoomedAvatar.style[style] = '';
+        });
     }
 
-    if ($(".zoomed_avatar")) {
-        $(".zoomed_avatar").css('top', '');
-        $(".zoomed_avatar").css('left', '');
-        $(".zoomed_avatar").css('right', '');
-        $(".zoomed_avatar").css('bottom', '');
-        $(".zoomed_avatar").css('width', '');
-        $(".zoomed_avatar").css('height', '');
-        $(".zoomed_avatar").css('margin', '');
-    }
-
-
-    document.getElementById("WorldInfo").style.top = '';
-    document.getElementById("WorldInfo").style.left = '';
-    document.getElementById("WorldInfo").style.right = '';
-    document.getElementById("WorldInfo").style.bottom = '';
-    document.getElementById("WorldInfo").style.height = '';
-    document.getElementById("WorldInfo").style.width = '';
-    document.getElementById("WorldInfo").style.margin = '';
-
-    document.getElementById("floatingPrompt").style.top = '';
-    document.getElementById("floatingPrompt").style.left = '';
-    document.getElementById("floatingPrompt").style.right = '';
-    document.getElementById("floatingPrompt").style.bottom = '';
-    document.getElementById("floatingPrompt").style.height = '';
-    document.getElementById("floatingPrompt").style.width = '';
-    document.getElementById("floatingPrompt").style.margin = '';
-
-    $('*[data-dragged="true"]').removeAttr('data-dragged');
-    power_user.movingUIState = {}
+    $('[data-dragged="true"]').removeAttr('data-dragged');
+    power_user.movingUIState = {};
     saveSettingsDebounced();
     eventSource.emit(event_types.MOVABLE_PANELS_RESET);
+
+    eventSource.once(event_types.SETTINGS_UPDATED, () => {
+        toastr.success('Panel positions reset');
+    });
+
 }
 
 function doNewChat() {
@@ -989,6 +975,15 @@ function doNewChat() {
     setTimeout(() => {
         $("#dialogue_popup_ok").trigger('click');
     }, 1);
+}
+
+function doRandomChat() {
+    resetSelectedGroup();
+    setCharacterId(Math.floor(Math.random() * characters.length));
+    setTimeout(() => {
+        replaceCurrentChat();
+    }, 1);
+
 }
 
 function doDelMode() {
@@ -1393,5 +1388,6 @@ $(document).ready(() => {
 
     registerSlashCommand('vn', toggleWaifu, ['vn'], ' – swaps Visual Novel Mode On/Off', false, true);
     registerSlashCommand('newchat', doNewChat, ['newchat'], ' – start a new chat with current character', true, true);
+    registerSlashCommand('random', doRandomChat, ['random'], ' – start a new chat with a random character', true, true);
     registerSlashCommand('delmode', doDelMode, ['delmode'], ' – enter message deletion mode', true, true);
 });

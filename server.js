@@ -752,6 +752,8 @@ function convertToV2(char) {
         creator_notes: char.creatorcomment,
         talkativeness: char.talkativeness,
         fav: char.fav,
+        creator: char.creator,
+        tags: char.tags,
     });
 
     result.chat = char.chat;
@@ -859,7 +861,7 @@ function charaFormatData(data) {
     _.set(char, 'data.creator_notes', data.creator_notes || '');
     _.set(char, 'data.system_prompt', data.system_prompt || '');
     _.set(char, 'data.post_history_instructions', data.post_history_instructions || '');
-    _.set(char, 'data.tags', typeof data.tags == 'string' ? (data.tags.split(',').map(x => x.trim()).filter(x => x)) : []);
+    _.set(char, 'data.tags', typeof data.tags == 'string' ? (data.tags.split(',').map(x => x.trim()).filter(x => x)) : data.tags || []);
     _.set(char, 'data.creator', data.creator || '');
     _.set(char, 'data.character_version', data.character_version || '');
     _.set(char, 'data.alternate_greetings', getAlternateGreetings(data));
@@ -1790,7 +1792,7 @@ app.post("/importcharacter", urlencodedParser, async function (request, response
                     let char = {
                         "name": jsonData.name,
                         "description": jsonData.description ?? '',
-                        "creatorcomment": jsonData.creatorcomment ?? '',
+                        "creatorcomment": jsonData.creatorcomment ?? jsonData.creator_notes ?? '',
                         "personality": jsonData.personality ?? '',
                         "first_mes": jsonData.first_mes ?? '',
                         "avatar": 'none',
@@ -1798,7 +1800,9 @@ app.post("/importcharacter", urlencodedParser, async function (request, response
                         "mes_example": jsonData.mes_example ?? '',
                         "scenario": jsonData.scenario ?? '',
                         "create_date": humanizedISO8601DateTime(),
-                        "talkativeness": jsonData.talkativeness ?? 0.5
+                        "talkativeness": jsonData.talkativeness ?? 0.5,
+                        "creator": jsonData.creator ?? '',
+                        "tags": jsonData.tags ?? '',
                     };
                     char = convertToV2(char);
                     char = JSON.stringify(char);
@@ -1811,7 +1815,7 @@ app.post("/importcharacter", urlencodedParser, async function (request, response
                     let char = {
                         "name": jsonData.char_name,
                         "description": jsonData.char_persona ?? '',
-                        "creatorcomment": '',
+                        "creatorcomment": jsonData.creatorcomment ?? jsonData.creator_notes ?? '',
                         "personality": '',
                         "first_mes": jsonData.char_greeting ?? '',
                         "avatar": 'none',
@@ -1819,7 +1823,9 @@ app.post("/importcharacter", urlencodedParser, async function (request, response
                         "mes_example": jsonData.example_dialogue ?? '',
                         "scenario": jsonData.world_scenario ?? '',
                         "create_date": humanizedISO8601DateTime(),
-                        "talkativeness": jsonData.talkativeness ?? 0.5
+                        "talkativeness": jsonData.talkativeness ?? 0.5,
+                        "creator": jsonData.creator ?? '',
+                        "tags": jsonData.tags ?? '',
                     };
                     char = convertToV2(char);
                     char = JSON.stringify(char);
@@ -1861,7 +1867,7 @@ app.post("/importcharacter", urlencodedParser, async function (request, response
                     let char = {
                         "name": jsonData.name,
                         "description": jsonData.description ?? '',
-                        "creatorcomment": jsonData.creatorcomment ?? '',
+                        "creatorcomment": jsonData.creatorcomment ?? jsonData.creator_notes ?? '',
                         "personality": jsonData.personality ?? '',
                         "first_mes": jsonData.first_mes ?? '',
                         "avatar": 'none',
@@ -1869,7 +1875,9 @@ app.post("/importcharacter", urlencodedParser, async function (request, response
                         "mes_example": jsonData.mes_example ?? '',
                         "scenario": jsonData.scenario ?? '',
                         "create_date": humanizedISO8601DateTime(),
-                        "talkativeness": jsonData.talkativeness ?? 0.5
+                        "talkativeness": jsonData.talkativeness ?? 0.5,
+                        "creator": jsonData.creator ?? '',
+                        "tags": jsonData.tags ?? '',
                     };
                     char = convertToV2(char);
                     char = JSON.stringify(char);
@@ -2264,7 +2272,7 @@ app.post('/uploaduseravatar', urlencodedParser, async (request, response) => {
 
         const image = await rawImg.cover(AVATAR_WIDTH, AVATAR_HEIGHT).getBufferAsync(jimp.MIME_PNG);
 
-        const filename = request.body.overwrite_name ?? `${Date.now()}.png`;
+        const filename = request.body.overwrite_name || `${Date.now()}.png`;
         const pathToNewFile = path.join(directories.avatars, filename);
         fs.writeFileSync(pathToNewFile, image);
         fs.rmSync(pathToUpload);
@@ -4016,7 +4024,7 @@ async function downloadChubCharacter(id) {
     }
 
     const buffer = await result.buffer();
-    const fileName = result.headers.get('content-disposition').split('filename=')[1];
+    const fileName = result.headers.get('content-disposition')?.split('filename=')[1] || `${sanitize(id)}.png`;
     const fileType = result.headers.get('content-type');
 
     return { buffer, fileName, fileType };
