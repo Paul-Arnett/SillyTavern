@@ -136,7 +136,7 @@ import {
     getCharaFilename,
 } from "./scripts/utils.js";
 
-import { extension_settings, loadExtensionSettings, runGenerationInterceptors, saveMetadataDebounced } from "./scripts/extensions.js";
+import { extension_settings, getContext, loadExtensionSettings, runGenerationInterceptors, saveMetadataDebounced } from "./scripts/extensions.js";
 import { executeSlashCommands, getSlashCommandsHelp, registerSlashCommand } from "./scripts/slash-commands.js";
 import {
     tag_map,
@@ -147,6 +147,7 @@ import {
     appendTagToList,
     createTagMapFromList,
     renameTagKey,
+    importTags,
     tag_filter_types,
 } from "./scripts/tags.js";
 import {
@@ -2773,20 +2774,16 @@ function getMaxContextSize() {
         this_max_context = (max_context - amount_gen);
     }
     if (main_api == 'novel') {
-        if (novel_tier === 1) {
-            this_max_context = 1024;
-        } else {
-            this_max_context = Number(max_context);
-            if (nai_settings.model_novel == 'krake-v2') {
-                // Krake has a max context of 2048
-                // Should be used with nerdstash tokenizer for best results
-                this_max_context = Math.min(max_context, 2048);
-            }
-            if (nai_settings.model_novel == 'clio-v1') {
-                // Clio has a max context of 8192
-                // Should be used with nerdstash_v2 tokenizer for best results
-                this_max_context = Math.min(max_context, 8192);
-            }
+        this_max_context = Number(max_context);
+        if (nai_settings.model_novel == 'krake-v2' || nai_settings.model_novel == 'euterpe-v2') {
+            // Krake and Euterpe have a max context of 2048
+            // Should be used with nerdstash tokenizer for best results
+            this_max_context = Math.min(max_context, 2048);
+        }
+        if (nai_settings.model_novel == 'clio-v1') {
+            // Clio has a max context of 8192
+            // Should be used with nerdstash_v2 tokenizer for best results
+            this_max_context = Math.min(max_context, 8192);
         }
     }
     if (main_api == 'openai') {
@@ -5594,6 +5591,15 @@ function openCharacterWorldPopup() {
     const worldId = (menu_type == 'create' ? create_save.world : characters[chid]?.data?.extensions?.world) || '';
     template.find('.character_name').text(name);
 
+    // Not needed on mobile
+    if (deviceInfo && deviceInfo.device.type === 'desktop') {
+        $(extraSelect).select2({
+            width: '100%',
+            placeholder: 'No auxillary Lorebooks set. Click here to select.',
+            allowClear: true,
+            closeOnSelect: false,
+        });
+    }
 
     // Apped to base dropdown
     world_names.forEach((item, i) => {
@@ -5630,7 +5636,7 @@ function openCharacterWorldPopup() {
             return;
         }
 
-        let selectScrollTop = null;
+        /*let selectScrollTop = null;
 
         if (deviceInfo && deviceInfo.device.type === 'desktop') {
             e.preventDefault();
@@ -5640,7 +5646,7 @@ function openCharacterWorldPopup() {
             option.prop('selected', !option.prop('selected'));
             await delay(1);
             selectElement.scrollTop = selectScrollTop;
-        }
+        }*/
 
         onExtraWorldInfoChanged();
     });
@@ -6340,6 +6346,12 @@ function importCharacter(file) {
 
                 await getCharacters();
                 select_rm_info(`char_import`, data.file_name, oldSelectedChar);
+                if (power_user.import_card_tags) {
+                    let currentContext = getContext();
+                    let avatarFileName = `${data.file_name}.png`;
+                    let importedCharacter = currentContext.characters.find(character => character.avatar === avatarFileName);
+                    await importTags(importedCharacter);
+                }
                 $("#rm_info_block").transition({ opacity: 1, duration: 1000 });
             }
         },
@@ -7173,6 +7185,7 @@ $(document).ready(function () {
             $("#amount_gen_block").find('input').prop("disabled", false);
 
             $("#amount_gen_block").css("opacity", 1.0);
+            $("#kobold_order").sortable("enable");
         } else {
             //$('.button').disableSelection();
             preset_settings = "gui";
@@ -7184,6 +7197,7 @@ $(document).ready(function () {
             $("#amount_gen_block").find('input').prop("disabled", true);
 
             $("#amount_gen_block").css("opacity", 0.45);
+            $("#kobold_order").sortable("disable");
         }
         saveSettingsDebounced();
     });
