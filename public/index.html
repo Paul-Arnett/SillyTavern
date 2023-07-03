@@ -1689,6 +1689,10 @@
                             <input id="disable-start-formatting-checkbox" type="checkbox" />
                             <span data-i18n="Disable chat start formatting">Disable chat start formatting</span>
                         </label>
+                        <label class="checkbox_label" for="trim_spaces">
+                            <input id="trim_spaces" type="checkbox" />
+                            <span data-i18n="Trim spaces">Trim spaces</span>
+                        </label>
                         <label class="checkbox_label" for="trim_sentences_checkbox">
                             <input id="trim_sentences_checkbox" type="checkbox" />
                             Trim Incomplete Sentences
@@ -1851,6 +1855,19 @@
                             </div>
                         </div>
                         <div>
+                            <h4>
+                                <span data-i18n="Start Reply With">
+                                    Start Reply With
+                                </span>
+                            </h4>
+                            <div>
+                                <textarea id="start_reply_with" rows="2" class="text_pole textarea_compact" placeholder="AI reply prefix"></textarea>
+                            </div>
+                            <label class="checkbox_label" for="chat-show-reply-prefix-checkbox"><input id="chat-show-reply-prefix-checkbox" type="checkbox" />
+                                <span data-i18n="Show reply prefix in chat">
+                                    Show reply prefix in chat
+                                </span>
+                            </label>
                             <h4>
                                 <span data-i18n="Pygmalion Formatting">
                                     Pygmalion Formatting
@@ -2072,15 +2089,12 @@
                                 </label>
                             </div>
                             <div>
-                                <span data-i18n="Chat Style:">Chat Style:</span><br>
-                                <label>
-                                    <input name="chat_display" type="radio" value="0" />
-                                    <span data-i18n="Default">Default</span>
-                                </label>
-                                <label>
-                                    <input name="chat_display" type="radio" value="1" />
-                                    <span data-i18n="Bubbles">Bubbles</span>
-                                </label>
+                                <span data-i18n="Chat Style:">Message Style:</span><br>
+                                <select id="chat_display">
+                                    <option value="0" data-i18n="Default">Flat Chat</span>
+                                    <option value="1" data-i18n="Bubbles">Bubble Chat</option>
+                                    <option value="2" data-i18n="Document">Single Document</option>
+                                </select>
                             </div>
                             <div id="sheldWidthToggleBlock">
                                 <span data-i18n="Chat Width (PC):">Chat Width (PC):</span><br>
@@ -2129,6 +2143,11 @@
                                 <label for="messageTimestampsEnabled" class="checkbox_label">
                                     <input id="messageTimestampsEnabled" type="checkbox" />
                                     <span data-i18n="Chat Timestamps">Chat Timestamps</span>
+                                </label>
+
+                                <label for="mesIDDisplayEnabled" class="checkbox_label">
+                                    <input id="mesIDDisplayEnabled" type="checkbox" />
+                                    <span data-i18n="Message IDs">Show Message IDs</span>
                                 </label>
 
                                 <label for="auto_scroll_chat_to_bottom" class="checkbox_label">
@@ -2275,6 +2294,12 @@
                             <label data-i18n="Prefer Character Card Jailbreak" for="prefer_character_jailbreak" title="If checked and the character card contains a jailbreak override (Post History Instruction), use that instead." class="checkbox_label">
                                 <input id="prefer_character_jailbreak" type="checkbox" />
                                 Prefer Char. JB
+                            </label>
+                            <label class="checkbox_label" for="continue_on_send">
+                                <input id="continue_on_send" type="checkbox" />
+                                <span data-i18n="Press Send to continue">
+                                    Press "Send" to continue
+                                </span>
                             </label>
                             <label for="auto-load-chat-checkbox"><input id="auto-load-chat-checkbox" type="checkbox" />
                                 <span data-i18n="Auto-load Last Chat">Auto-load Last Chat</span>
@@ -2518,8 +2543,8 @@
                                 </label>
                                 <div class="flex-container flexFlowColumn">
                                     <div class="flex-container flexFlowColumn">
-                                        <div class="flex-container justifyContentFlexEnd">
-                                            <div class="form_create_bottom_buttons_block flexnowrap">
+                                        <div class="flex-container justifyContentFlexEnd flexFlowColumn">
+                                            <div class="form_create_bottom_buttons_block">
                                                 <div id="rm_button_back" class="menu_button fa-solid fa-left-long "></div>
 
                                                 <!-- <div id="renameCharButton" class="menu_button fa-solid fa-user-pen" title="Rename Character"></div> -->
@@ -3256,6 +3281,7 @@
                     <img src="">
 
                 </div>
+                <div class="mesIDDisplay"></div>
                 <div class="mes_timer"></div>
             </div>
             <div class="swipe_left fa-solid fa-chevron-left"></div>
@@ -3457,6 +3483,10 @@
             <a id="option_impersonate" title="Ask AI to write your message for you">
                 <i class="fa-lg fa-solid fa-user-secret"></i>
                 <span data-i18n="Impersonate">Impersonate</span>
+            </a>
+            <a id="option_continue" title="Continue the last message">
+                <i class="fa-lg fa-solid fa-arrow-right"></i>
+                <span data-i18n="Continue">Continue</span>
             </a>
             <a id="option_regenerate">
                 <i class="fa-lg fa-solid fa-repeat"></i>

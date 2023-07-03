@@ -193,7 +193,8 @@ table.responsiveTable {
     text-align: right;
 }
 
-.mes_text br, .mes_bias br {
+.mes_text br,
+.mes_bias br {
     content: ' ';
 }
 
@@ -230,7 +231,8 @@ table.responsiveTable {
     padding: 1em;
 }
 
-.mes .mes_timer {
+.mes .mes_timer,
+.mes .mesIDDisplay {
     cursor: default;
     opacity: 0.7;
     font-size: calc(var(--mainFontSize) * 0.9);
@@ -800,7 +802,8 @@ body.no-timer .mes_timer {
     display: none !important;
 }
 
-body.no-timestamps .timestamp {
+body.no-timestamps .timestamp,
+body.no-mesIDDisplay .mesIDDisplay {
     display: none !important;
 }
 
@@ -4261,6 +4264,51 @@ body.bubblechat .mes[is_user="true"] {
 body.w1000px #sheld {
     max-width: 1000px !important;
 }
+
+/* Document Style */
+
+body.documentstyle #chat .mes:not(.last_mes) {
+    padding: 0 10px;
+}
+
+body.documentstyle .last_mes {
+    padding-top: 0;
+}
+
+body.documentstyle #chat .mes .mes_text {
+    padding: 0;
+}
+
+body.documentstyle #chat .mes .mes_block {
+    margin-right: 30px;
+}
+
+body.documentstyle #chat .mes .mes_text {
+    margin-left: 20px;
+}
+
+body.documentstyle #chat .last_mes .mes_text {
+    margin-left: 20px;
+    min-height: 70px;
+}
+
+body.documentstyle #chat .last_mes:has(> .del_checkbox[style*="display: block"]) .mes_text {
+    margin-left: 0px;
+}
+
+body.documentstyle #chat .last_mes .swipe_left {
+    left: 5px;
+}
+
+body.documentstyle #chat .mes .mesAvatarWrapper,
+body.documentstyle #chat .mes .mes_block .ch_name .name_text,
+body.documentstyle #chat .mes .mes_block .ch_name .timestamp,
+body.documentstyle .mes:not(.last_mes) .ch_name .mes_buttons {
+    display: none !important;
+}
+
+
+
 
 /*FastUI blur removal*/
 

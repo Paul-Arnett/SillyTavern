@@ -1062,6 +1062,11 @@ function messageFormatting(mes, ch_name, isSystem, isUser) {
         mes = '';
     }
 
+    // Prompt bias replacement should be applied on the raw message
+    if (!power_user.show_user_prompt_bias && ch_name && !isUser && !isSystem) {
+        mes = mes.replaceAll(substituteParams(power_user.user_prompt_bias), "");
+    }
+
     if (power_user.auto_fix_generated_markdown) {
         mes = fixMarkdown(mes);
     }
@@ -1127,7 +1132,6 @@ function messageFormatting(mes, ch_name, isSystem, isUser) {
          //console.log('mes after removed <tags>')
          //console.log(mes)
      } */
-
     return mes;
 }
 
@@ -1159,6 +1163,7 @@ function getMessageFromTemplate({
     mes.find('.ch_name .name_text').text(characterName);
     mes.find('.mes_bias').html(bias);
     mes.find('.timestamp').text(timestamp);
+    mes.find('.mesIDDisplay').text(`#${mesId}`);
     title && mes.attr('title', title);
     timerValue && mes.find('.mes_timer').attr('title', timerTitle).text(timerValue);
 
@@ -1211,6 +1216,13 @@ function addOneMessage(mes, { type = "normal", insertAfter = null, scroll = true
 
     if (mes?.extra?.display_text) {
         messageText = mes.extra.display_text;
+    }
+
+    // Forbidden black magic
+    // This allows to use "continue" on user messages
+    if (type === 'swipe' && mes.swipe_id === undefined) {
+        mes.swipe_id = 0;
+        mes.swipes = [mes.mes];
     }
 
     if (mes.name === name1) {
@@ -1347,6 +1359,7 @@ function addOneMessage(mes, { type = "normal", insertAfter = null, scroll = true
         $("#chat").find(`[mesid="${count_view_mes - 1}"]`).find('.mes_text').append(messageText);
         appendImageToMessage(mes, $("#chat").find(`[mesid="${count_view_mes - 1}"]`));
         $("#chat").find(`[mesid="${count_view_mes - 1}"]`).attr('title', title);
+        $("#chat").find(`[mesid="${count_view_mes - 1}"]`).find('.timestamp').text(timestamp);
 
         if (mes.swipe_id == mes.swipes.length - 1) {
             $("#chat").find(`[mesid="${count_view_mes - 1}"]`).find('.mes_timer').text(params.timerValue);
@@ -1763,6 +1776,7 @@ class StreamingProcessor {
 
             if (this.type == 'swipe' && Array.isArray(chat[messageId]['swipes'])) {
                 chat[messageId]['swipes'][chat[messageId]['swipe_id']] = processedText;
+                chat[messageId]['swipe_info'][chat[messageId]['swipe_id']] = { 'send_date': chat[messageId]['send_date'], 'gen_started': chat[messageId]['gen_started'], 'gen_finished': chat[messageId]['gen_finished'] };
             }
 
             let formattedText = messageFormatting(
@@ -1844,6 +1858,7 @@ class StreamingProcessor {
         if (this.type !== 'swipe' && this.type !== 'impersonate') {
             if (Array.isArray(chat[messageId]['swipes']) && chat[messageId]['swipes'].length === 1 && chat[messageId]['swipe_id'] === 0) {
                 chat[messageId]['swipes'][0] = chat[messageId]['mes'];
+                chat[messageId]['swipe_info'][0] = { 'send_date': chat[messageId]['send_date'], 'gen_started': chat[messageId]['gen_started'], 'gen_finished': chat[messageId]['gen_finished'] };
             }
         }
     }
@@ -1942,7 +1957,9 @@ async function Generate(type, { automatic_trigger, force_name2, resolve, reject,
     }
 
     if (main_api == 'kobold' && kai_settings.streaming_kobold && !kai_settings.can_use_streaming) {
-        toastr.warning('Streaming is enabled, but the version of Kobold used does not support token streaming.', undefined, { timeOut: 10000, preventDuplicates: true, });
+        toastr.error('Streaming is enabled, but the version of Kobold used does not support token streaming.', undefined, { timeOut: 10000, preventDuplicates: true, });
+        is_send_press = false;
+        return;
     }
 
     if (main_api == 'kobold' && kai_settings.streaming_kobold && power_user.multigen) {
@@ -1995,9 +2012,13 @@ async function Generate(type, { automatic_trigger, force_name2, resolve, reject,
             }
         }
 
+        if (!type && !textareaText && power_user.continue_on_send && !selected_group && chat.length && !chat[chat.length - 1]['is_user']) {
+            type = 'continue';
+        }
+
         deactivateSendButtons();
 
-        let { messageBias, promptBias } = getBiasStrings(textareaText, type);
+        let { messageBias, promptBias, isUserPromptBias } = getBiasStrings(textareaText, type);
 
         //*********************************
         //PRE FORMATING STRING
@@ -2072,7 +2093,8 @@ async function Generate(type, { automatic_trigger, force_name2, resolve, reject,
             storyString += appendToStoryString(Scenario, power_user.disable_scenario_formatting ? '' : 'Circumstances and context of the dialogue: ');
         }
 
-        if (promptBias || power_user.always_force_name2 || is_pygmalion) {
+        // kingbri MARK: - Make sure the prompt bias isn't the same as the user bias
+        if ((promptBias && !isUserPromptBias) || power_user.always_force_name2 || is_pygmalion) {
             force_name2 = true;
         }
 
@@ -2095,6 +2117,11 @@ async function Generate(type, { automatic_trigger, force_name2, resolve, reject,
             }
 
             chat2[i] = formatMessageHistoryItem(coreChat[j], isInstruct);
+
+            // Do not format the message for continuation
+            if (i === 0 && type == 'continue') {
+                chat2[i] = coreChat[j].mes;
+            }
         }
 
         // Adjust token limit for Horde
@@ -2162,6 +2189,11 @@ async function Generate(type, { automatic_trigger, force_name2, resolve, reject,
             pinExmString = examplesString = mesExamplesArray.join('');
         }
 
+        let cyclePrompt = '';
+        if (type == 'continue') {
+            cyclePrompt = chat2.shift();
+        }
+
         // Collect enough messages to fill the context
         let arrMes = [];
         let tokenCount = getMessagesTokenCount();
@@ -2206,13 +2238,28 @@ async function Generate(type, { automatic_trigger, force_name2, resolve, reject,
         let mesSend = [];
         console.debug('calling runGenerate');
         streamingProcessor = isStreamingEnabled() ? new StreamingProcessor(type, force_name2) : false;
-        runGenerate();
+
+        if (type == 'continue') {
+            // Coping mechanism for OAI spacing
+            if ((main_api === 'openai' || main_api === 'poe') && !cyclePrompt.endsWith(' ')) {
+                cyclePrompt += ' ';
+            }
+
+            // Save reply does add cycle text to the prompt, so it's not needed here
+            streamingProcessor && (streamingProcessor.firstMessageText = '');
+            message_already_generated = cyclePrompt;
+            tokens_already_generated = 1; // Multigen copium
+        }
+
+        // Multigen rewrites the type and I don't know why
+        const originalType = type;
+        runGenerate(cyclePrompt);
 
         async function runGenerate(cycleGenerationPromt = '') {
             is_send_press = true;
 
             generatedPromtCache += cycleGenerationPromt;
-            if (generatedPromtCache.length == 0) {
+            if (generatedPromtCache.length == 0 || type === 'continue') {
                 if (main_api === 'openai') {
                     generateOpenAIPromptCache();
                 }
@@ -2313,7 +2360,21 @@ async function Generate(type, { automatic_trigger, force_name2, resolve, reject,
                     if (!mesSendString.endsWith('\n')) {
                         mesSendString += '\n';
                     }
-                    mesSendString += (`${name2}:${promptBias || ''}`);
+
+                    // Add a leading space to the prompt bias if applicable
+                    if (!promptBias || promptBias.length === 0) {
+                        console.debug("No prompt bias was found.");
+                        mesSendString += `${name2}:`;
+                    } else if (promptBias.startsWith(' ')) {
+                        console.debug(`A prompt bias with a leading space was found: ${promptBias}`);
+                        mesSendString += `${name2}:${promptBias}`
+                    } else {
+                        console.debug(`A prompt bias was found: ${promptBias}`);
+                        mesSendString += `${name2}: ${promptBias}`;
+                    }
+                } else if (power_user.user_prompt_bias) {
+                    console.debug(`A prompt bias was found without character's name appended: ${promptBias}`);
+                    mesSendString += substituteParams(power_user.user_prompt_bias);
                 }
 
                 return mesSendString;
@@ -2538,6 +2599,10 @@ async function Generate(type, { automatic_trigger, force_name2, resolve, reject,
                 hideSwipeButtons();
                 let getMessage = await streamingProcessor.generate();
 
+                if (type == 'continue') {
+                    getMessage = message_already_generated + getMessage;
+                }
+
                 if (streamingProcessor && !streamingProcessor.isStopped && streamingProcessor.isFinished) {
                     streamingProcessor.onFinishStreaming(streamingProcessor.messageId, getMessage);
                     streamingProcessor = null;
@@ -2592,7 +2657,12 @@ async function Generate(type, { automatic_trigger, force_name2, resolve, reject,
 
                         tokens_already_generated = 0;
                         generatedPromtCache = "";
-                        getMessage = message_already_generated.substring(magFirst.length);
+                        const substringStart = originalType !== 'continue' ? magFirst.length : 0;
+                        getMessage = message_already_generated.substring(substringStart);
+                    }
+
+                    if (type == 'continue') {
+                        getMessage = message_already_generated + getMessage;
                     }
 
                     //Formating
@@ -2610,7 +2680,8 @@ async function Generate(type, { automatic_trigger, force_name2, resolve, reject,
                             resolve(getMessage);
                         }
                         else {
-                            if (!isMultigenEnabled()) {
+                            // Without streaming we'll be having a full message on continuation. Treat it as a multigen last chunk.
+                            if (!isMultigenEnabled() && originalType !== 'continue') {
                                 ({ type, getMessage } = saveReply(type, getMessage, this_mes_is_name, title));
                             }
                             else {
@@ -2726,8 +2797,14 @@ export function getBiasStrings(textareaText, type) {
         }
     }
 
-    promptBias = messageBias || promptBias || '';
-    return { messageBias, promptBias };
+    promptBias = messageBias || promptBias || power_user.user_prompt_bias || '';
+    const isUserPromptBias = promptBias === power_user.user_prompt_bias;
+
+    // Substitute params for everything
+    messageBias = substituteParams(messageBias);
+    promptBias = substituteParams(promptBias);
+
+    return { messageBias, promptBias, isUserPromptBias };
 }
 
 function formatMessageHistoryItem(chatItem, isInstruct) {
@@ -3231,7 +3308,7 @@ function promptItemize(itemizedPrompts, requestedMesId) {
 function setInContextMessages(lastmsg, type) {
     $("#chat .mes").removeClass('lastInContext');
 
-    if (type === 'swipe' || type === 'regenerate') {
+    if (type === 'swipe' || type === 'regenerate' || type === 'continue') {
         lastmsg++;
     }
 
@@ -3314,32 +3391,29 @@ function extractTitleFromData(data) {
 }
 
 function extractMessageFromData(data) {
-    let getMessage = "";
-
-    if (main_api == 'kobold') {
-        getMessage = data.results[0].text;
+    switch (main_api) {
+        case 'kobold':
+            return data.results[0].text;
+        case 'koboldhorde':
+            return data.text;
+        case 'textgenerationwebui':
+            return data.results[0].text;
+        case 'novel':
+            return data.output;
+        case 'openai':
+        case 'poe':
+            return data;
+        default:
+            return ''
     }
-
-    if (main_api == 'koboldhorde') {
-        getMessage = data.text;
-    }
-
-    if (main_api == 'textgenerationwebui') {
-        getMessage = data.results[0].text;
-    }
-
-    if (main_api == 'novel') {
-        getMessage = data.output;
-    }
-
-    if (main_api == 'openai' || main_api == 'poe') {
-        getMessage = data;
-    }
-
-    return getMessage;
 }
 
 function cleanUpMessage(getMessage, isImpersonate, displayIncompleteSentences = false) {
+    // Append the user bias first before trimming anything else
+    if (power_user.user_prompt_bias && power_user.user_prompt_bias.length !== 0) {
+        getMessage = substituteParams(power_user.user_prompt_bias) + getMessage;
+    }
+
     if (!displayIncompleteSentences && power_user.trim_sentences) {
         getMessage = end_trim_to_sentence(getMessage, power_user.include_newline);
     }
@@ -3348,7 +3422,9 @@ function cleanUpMessage(getMessage, isImpersonate, displayIncompleteSentences = 
         getMessage = collapseNewlines(getMessage);
     }
 
-    getMessage = $.trim(getMessage);
+    if (power_user.trim_spaces) {
+        getMessage = getMessage.trim();
+    }
     // trailing invisible whitespace before every newlines, on a multiline string
     // "trailing whitespace on newlines       \nevery line of the string    \n?sample text" ->
     // "trailing whitespace on newlines\nevery line of the string\nsample text"
@@ -3419,7 +3495,7 @@ function cleanUpMessage(getMessage, isImpersonate, displayIncompleteSentences = 
 }
 
 function saveReply(type, getMessage, this_mes_is_name, title) {
-    if (type != 'append' && type != 'appendFinal' && chat.length && (chat[chat.length - 1]['swipe_id'] === undefined ||
+    if (type != 'append' && type != 'continue' && type != 'appendFinal' && chat.length && (chat[chat.length - 1]['swipe_id'] === undefined ||
         chat[chat.length - 1]['is_user'])) {
         type = 'normal';
     }
@@ -3435,16 +3511,18 @@ function saveReply(type, getMessage, this_mes_is_name, title) {
             chat[chat.length - 1]['mes'] = getMessage;
             chat[chat.length - 1]['gen_started'] = generation_started;
             chat[chat.length - 1]['gen_finished'] = generationFinished;
+            chat[chat.length - 1]['send_date'] = getMessageTimeStamp();
             addOneMessage(chat[chat.length - 1], { type: 'swipe' });
         } else {
             chat[chat.length - 1]['mes'] = getMessage;
         }
-    } else if (type === 'append') {
+    } else if (type === 'append' || type === 'continue') {
         console.debug("Trying to append.")
         chat[chat.length - 1]['title'] = title;
         chat[chat.length - 1]['mes'] += getMessage;
         chat[chat.length - 1]['gen_started'] = generation_started;
         chat[chat.length - 1]['gen_finished'] = generationFinished;
+        chat[chat.length - 1]['send_date'] = getMessageTimeStamp();
         addOneMessage(chat[chat.length - 1], { type: 'swipe' });
     } else if (type === 'appendFinal') {
         console.debug("Trying to appendFinal.")
@@ -3452,6 +3530,7 @@ function saveReply(type, getMessage, this_mes_is_name, title) {
         chat[chat.length - 1]['mes'] = getMessage;
         chat[chat.length - 1]['gen_started'] = generation_started;
         chat[chat.length - 1]['gen_finished'] = generationFinished;
+        chat[chat.length - 1]['send_date'] = getMessageTimeStamp();
         addOneMessage(chat[chat.length - 1], { type: 'swipe' });
 
     } else {
@@ -3462,7 +3541,9 @@ function saveReply(type, getMessage, this_mes_is_name, title) {
         chat[chat.length - 1]['is_user'] = false;
         chat[chat.length - 1]['is_name'] = this_mes_is_name;
         chat[chat.length - 1]['send_date'] = getMessageTimeStamp();
-        getMessage = $.trim(getMessage);
+        if (power_user.trim_spaces) {
+            getMessage = getMessage.trim();
+        }
         chat[chat.length - 1]['mes'] = getMessage;
         chat[chat.length - 1]['title'] = title;
         chat[chat.length - 1]['gen_started'] = generation_started;
@@ -3483,16 +3564,19 @@ function saveReply(type, getMessage, this_mes_is_name, title) {
         saveImageToMessage(img, chat[chat.length - 1]);
         addOneMessage(chat[chat.length - 1]);
     }
-
     const item = chat[chat.length - 1];
+    if (item['swipe_info'] === undefined) {
+        item['swipe_info'] = [];
+    }
     if (item['swipe_id'] !== undefined) {
         item['swipes'][item['swipes'].length - 1] = item['mes'];
+        item['swipe_info'][item['swipes'].length - 1] = { 'send_date': item['send_date'], 'gen_started': item['gen_started'], 'gen_finished': item['gen_finished'] };
     } else {
         item['swipe_id'] = 0;
         item['swipes'] = [];
         item['swipes'][0] = chat[chat.length - 1]['mes'];
+        item['swipe_info'][0] = { 'send_date': chat[chat.length - 1]['send_date'], 'gen_started': chat[chat.length - 1]['gen_started'], 'gen_finished': chat[chat.length - 1]['gen_finished'] };
     }
-
     return { type, getMessage };
 }
 
@@ -3870,6 +3954,7 @@ async function getChatResult() {
         if (Array.isArray(alternateGreetings) && alternateGreetings.length > 0) {
             chat[0]['swipe_id'] = 0;
             chat[0]['swipes'] = [];
+            chat[0]['swipe_info'] = [];
             chat[0]['swipes'][0] = chat[0]['mes'];
 
             for (let i = 0; i < alternateGreetings.length; i++) {
@@ -4735,7 +4820,12 @@ function setCharacterBlockHeight() {
 // Common code for message editor done and auto-save
 function updateMessage(div) {
     const mesBlock = div.closest(".mes_block");
-    const text = mesBlock.find(".edit_textarea").val().trim();
+    let text = mesBlock.find(".edit_textarea").val();
+
+    if (power_user.trim_spaces) {
+        text = text.trim();
+    }
+
     const bias = extractMessageBias(text);
     const mes = chat[this_edit_mes_id];
     mes["mes"] = text;
@@ -5138,6 +5228,7 @@ function select_rm_create() {
     $("#talkativeness_slider").val(create_save.talkativeness);
     $("#scenario_pole").val(create_save.scenario);
     $("#mes_example_textarea").val(create_save.mes_example.trim().length === 0 ? '<START>' : create_save.mes_example);
+    $('#character_json_data').val('');
     $("#avatar_div").css("display", "flex");
     $("#avatar_load_preview").attr("src", default_avatar);
     $("#renameCharButton").css('display', 'none');
@@ -5418,6 +5509,7 @@ async function importCharacterChat(formData) {
 function updateViewMessageIds() {
     $('#chat').find(".mes").each(function (index, element) {
         $(element).attr("mesid", index);
+        $(element).find('.mesIDDisplay').text(`#${index}`);
     });
 
     $('#chat .mes').removeClass('last_mes');
@@ -5857,6 +5949,7 @@ async function createOrEditCharacter(e) {
                         if (Array.isArray(alternateGreetings) && alternateGreetings.length > 0) {
                             chat[0]['swipe_id'] = 0;
                             chat[0]['swipes'] = [];
+                            chat[0]['swipe_info'] = [];
                             chat[0]['swipes'][0] = chat[0]['mes'];
 
                             for (let i = 0; i < alternateGreetings.length; i++) {
@@ -5941,12 +6034,17 @@ function swipe_left() {      // when we swipe left..but no generation.
         if (chat[chat.length - 1]['swipe_id'] === 0) {
             $(this).css('display', 'none');
         }*/ // Just in case
+        if (!Array.isArray(chat[chat.length - 1]['swipe_info'])) {
+            chat[chat.length - 1]['swipe_info'] = [];
+        }
         let this_mes_div = $(this).parent();
         let this_mes_block = $(this).parent().children('.mes_block').children('.mes_text');
         const this_mes_div_height = this_mes_div[0].scrollHeight;
         this_mes_div.css('height', this_mes_div_height);
         const this_mes_block_height = this_mes_block[0].scrollHeight;
         chat[chat.length - 1]['mes'] = chat[chat.length - 1]['swipes'][chat[chat.length - 1]['swipe_id']];
+        chat[chat.length - 1]['send_date'] = chat[chat.length - 1].swipe_info[chat[chat.length - 1]['swipe_id']]?.send_date || chat[chat.length - 1].send_date; //load the last mes box with the latest generation
+
         if (chat[chat.length - 1].extra) {
             // if message has memory attached - remove it to allow regen
             if (chat[chat.length - 1].extra.memory) {
@@ -6059,7 +6157,9 @@ const swipe_right = () => {
     if (chat[chat.length - 1]['swipe_id'] === undefined) {              // if there is no swipe-message in the last spot of the chat array
         chat[chat.length - 1]['swipe_id'] = 0;                        // set it to id 0
         chat[chat.length - 1]['swipes'] = [];                         // empty the array
+        chat[chat.length - 1]['swipe_info'] = [];
         chat[chat.length - 1]['swipes'][0] = chat[chat.length - 1]['mes'];  //assign swipe array with last message from chat
+        chat[chat.length - 1]['swipe_info'][0] = { 'send_date': chat[chat.length - 1]['send_date'], 'gen_started': chat[chat.length - 1]['gen_started'], 'gen_finished': chat[chat.length - 1]['gen_finished'] }; //assign swipe info array with last message from chat
     }
     chat[chat.length - 1]['swipe_id']++;                                      //make new slot in array
     if (chat[chat.length - 1].extra) {
@@ -6072,6 +6172,9 @@ const swipe_right = () => {
             delete chat[chat.length - 1].extra.display_text;
         }
     }
+    if (!Array.isArray(chat[chat.length - 1]['swipe_info'])) {
+        chat[chat.length - 1]['swipe_info'] = [];
+    }
     //console.log(chat[chat.length-1]['swipes']);
     if (parseInt(chat[chat.length - 1]['swipe_id']) === chat[chat.length - 1]['swipes'].length) { //if swipe id of last message is the same as the length of the 'swipes' array
         delete chat[chat.length - 1].gen_started;
@@ -6079,6 +6182,7 @@ const swipe_right = () => {
         run_generate = true;
     } else if (parseInt(chat[chat.length - 1]['swipe_id']) < chat[chat.length - 1]['swipes'].length) { //otherwise, if the id is less than the number of swipes
         chat[chat.length - 1]['mes'] = chat[chat.length - 1]['swipes'][chat[chat.length - 1]['swipe_id']]; //load the last mes box with the latest generation
+        chat[chat.length - 1]['send_date'] = chat[chat.length - 1]?.swipe_info[chat[chat.length - 1]['swipe_id']]?.send_date || chat[chat.length - 1]['send_date']; //update send date
         run_swipe_right = true; //then prepare to do normal right swipe to show next message
     }
 
@@ -7069,7 +7173,8 @@ $(document).ready(function () {
 
     ///////////// OPTIMIZED LISTENERS FOR LEFT SIDE OPTIONS POPUP MENU //////////////////////
 
-    $("#options [id]").on("click", function () {
+    $("#options [id]").on("click", function (event, customData) {
+        const fromSlashCommand = customData?.fromSlashCommand || false;
         var id = $(this).attr("id");
 
         if (id == "option_select_chat") {
@@ -7110,6 +7215,13 @@ $(document).ready(function () {
             if (is_send_press == false) {
                 is_send_press = true;
                 Generate("impersonate");
+            }
+        }
+
+        else if (id == 'option_continue') {
+            if (is_send_press == false || fromSlashCommand) {
+                is_send_press = true;
+                Generate("continue");
             }
         }
 
@@ -7364,7 +7476,9 @@ $(document).ready(function () {
             } else {
                 this_edit_mes_chname = name2;
             }
-            text = text.trim();
+            if (power_user.trim_spaces) {
+                text = text.trim();
+            }
             $(this)
                 .closest(".mes_block")
                 .find(".mes_text")
@@ -7502,7 +7616,11 @@ $(document).ready(function () {
         let oldScroll = $('#chat')[0].scrollTop;
         const clone = JSON.parse(JSON.stringify(chat[this_edit_mes_id])); // quick and dirty clone
         clone.send_date = Date.now();
-        clone.mes = $(this).closest(".mes").find('.edit_textarea').val().trim();
+        clone.mes = $(this).closest(".mes").find('.edit_textarea').val();
+
+        if (power_user.trim_spaces) {
+            clone.mes = clone.mes.trim();
+        }
 
         chat.splice(Number(this_edit_mes_id) + 1, 0, clone);
         addOneMessage(clone, { insertAfter: this_edit_mes_id });

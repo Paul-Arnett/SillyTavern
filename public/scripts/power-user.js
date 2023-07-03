@@ -27,6 +27,8 @@ import {
 
 import { registerSlashCommand } from "./slash-commands.js";
 
+import { delay } from "./utils.js";
+
 export {
     loadPowerUserSettings,
     loadMovingUIState,
@@ -49,9 +51,10 @@ const avatar_styles = {
     RECTANGULAR: 1,
 }
 
-const chat_styles = {
+export const chat_styles = {
     DEFAULT: 0,
     BUBBLES: 1,
+    DOCUMENT: 2,
 }
 
 const sheld_width = {
@@ -101,11 +104,14 @@ let power_user = {
     trim_sentences: false,
     include_newline: false,
     always_force_name2: false,
+    user_prompt_bias: '',
+    show_user_prompt_bias: true,
     multigen: false,
     multigen_first_chunk: 50,
     multigen_next_chunks: 30,
     custom_chat_separator: '',
     markdown_escape_strings: '',
+
     fast_ui_mode: true,
     avatar_style: avatar_styles.ROUND,
     chat_display: chat_styles.DEFAULT,
@@ -115,6 +121,7 @@ let power_user = {
     play_message_sound: false,
     play_sound_unfocused: true,
     auto_save_msg_edits: false,
+
     sort_field: 'name',
     sort_order: 'asc',
     sort_rule: null,
@@ -125,7 +132,6 @@ let power_user = {
     main_text_color: `${getComputedStyle(document.documentElement).getPropertyValue('--SmartThemeBodyColor').trim()}`,
     italics_text_color: `${getComputedStyle(document.documentElement).getPropertyValue('--SmartThemeEmColor').trim()}`,
     quote_text_color: `${getComputedStyle(document.documentElement).getPropertyValue('--SmartThemeQuoteColor').trim()}`,
-    //fastui_bg_color: `${getComputedStyle(document.documentElement).getPropertyValue('--SmartThemeFastUIBGColor').trim()}`,
     blur_tint_color: `${getComputedStyle(document.documentElement).getPropertyValue('--SmartThemeBlurTintColor').trim()}`,
     user_mes_blur_tint_color: `${getComputedStyle(document.documentElement).getPropertyValue('--SmartThemeUserMesBlurTintColor').trim()}`,
     bot_mes_blur_tint_color: `${getComputedStyle(document.documentElement).getPropertyValue('--SmartThemeBotMesBlurTintColor').trim()}`,
@@ -152,9 +158,12 @@ let power_user = {
     hotswap_enabled: true,
     timer_enabled: true,
     timestamps_enabled: true,
+    mesIDDisplay_enabled: false,
     max_context_unlocked: false,
     prefer_character_prompt: true,
     prefer_character_jailbreak: true,
+    continue_on_send: false,
+    trim_spaces: true,
 
     instruct: {
         enabled: false,
@@ -191,7 +200,6 @@ const storage_keys = {
     main_text_color: "TavernAI_main_text_color",
     italics_text_color: "TavernAI_italics_text_color",
     quote_text_color: "TavernAI_quote_text_color",
-    //fastui_bg_color: "TavernAI_fastui_bg_color",
     blur_tint_color: "TavernAI_blur_tint_color",
     user_mes_blur_tint_color: "TavernAI_user_mes_blur_tint_color",
     bot_mes_blur_tint_color: "TavernAI_bot_mes_blur_tint_color",
@@ -206,6 +214,7 @@ const storage_keys = {
     hotswap_enabled: 'HotswapEnabled',
     timer_enabled: 'TimerEnabled',
     timestamps_enabled: 'TimestampsEnabled',
+    mesIDDisplay_enabled: 'mesIDDisplayEnabled',
 };
 
 let browser_has_focus = true;
@@ -283,6 +292,13 @@ function switchTimestamps() {
     $("#messageTimestampsEnabled").prop("checked", power_user.timestamps_enabled);
 }
 
+function switchMesIDDisplay() {
+    const value = localStorage.getItem(storage_keys.mesIDDisplay_enabled);
+    power_user.mesIDDisplay_enabled = value === null ? true : value == "true";
+    $("body").toggleClass("no-mesIDDisplay", !power_user.mesIDDisplay_enabled);
+    $("#MesIDDisplayEnabled").prop("checked", power_user.mesIDDisplay_enabled);
+}
+
 function switchUiMode() {
     const fastUi = localStorage.getItem(storage_keys.fast_ui_mode);
     power_user.fast_ui_mode = fastUi === null ? true : fastUi == "true";
@@ -297,13 +313,6 @@ function toggleWaifu() {
 function switchWaifuMode() {
     $("body").toggleClass("waifuMode", power_user.waifuMode);
     $("#waifuMode").prop("checked", power_user.waifuMode);
-    /*     if (isMobile() && !$('body').hasClass('waifuMode')) {
-            console.debug('saw mobile regular mode, removing ZoomedAvatars');
-            if ($('.zoomed_avatar[forChar]').length) {
-                $('.zoomed_avatar[forChar]').remove();
-            }
-            return;
-        } */
     scrollChatToBottom();
 }
 
@@ -317,7 +326,6 @@ function switchMovingUI() {
             loadMovingUIState();
         }
     };
-    //scrollChatToBottom();
 }
 
 function noShadows() {
@@ -336,10 +344,35 @@ function applyAvatarStyle() {
 }
 
 function applyChatDisplay() {
-    power_user.chat_display = Number(localStorage.getItem(storage_keys.chat_display) ?? chat_styles.DEFAULT);
-    $("body").toggleClass("bubblechat", power_user.chat_display === chat_styles.BUBBLES);
-    $(`input[name="chat_display"][value="${power_user.chat_display}"]`).prop("checked", true);
 
+    if (!power_user.chat_display === (null || undefined)) {
+        console.debug('applyChatDisplay: saw no chat display type defined')
+        return
+    }
+    console.debug(`applyChatDisplay: applying ${power_user.chat_display}`)
+
+    $(`#chat_display option[value=${power_user.chat_display}]`).attr("selected", true)
+
+    switch (power_user.chat_display) {
+        case 0: {
+            console.log('applying default chat')
+            $("body").removeClass("bubblechat");
+            $("body").removeClass("documentstyle");
+            break
+        }
+        case 1: {
+            console.log('applying bubblechat')
+            $("body").addClass("bubblechat");
+            $("body").removeClass("documentstyle");
+            break
+        }
+        case 2: {
+            console.log('applying document style')
+            $("body").removeClass("bubblechat");
+            $("body").addClass("documentstyle");
+            break
+        }
+    }
 }
 
 function applySheldWidth() {
@@ -415,7 +448,6 @@ async function applyTheme(name) {
         { key: 'main_text_color', selector: '#main-text-color-picker', type: 'main' },
         { key: 'italics_text_color', selector: '#italics-color-picker', type: 'italics' },
         { key: 'quote_text_color', selector: '#quote-color-picker', type: 'quote' },
-        //{ key: 'fastui_bg_color', selector: '#fastui-bg-color-picker', type: 'fastUIBG' },
         { key: 'blur_tint_color', selector: '#blur-tint-color-picker', type: 'blurTint' },
         { key: 'user_mes_blur_tint_color', selector: '#user-mes-blur-tint-color-picker', type: 'userMesBlurTint' },
         { key: 'bot_mes_blur_tint_color', selector: '#bot-mes-blur-tint-color-picker', type: 'botMesBlurTint' },
@@ -498,6 +530,13 @@ async function applyTheme(name) {
             }
         },
         {
+            key: 'mesIDDisplay_enabled',
+            action: async () => {
+                localStorage.setItem(storage_keys.mesIDDisplay_enabled, power_user.mesIDDisplay_enabled);
+                switchMesIDDisplay();
+            }
+        },
+        {
             key: 'hotswap_enabled',
             action: async () => {
                 localStorage.setItem(storage_keys.hotswap_enabled, power_user.hotswap_enabled);
@@ -529,12 +568,12 @@ applySheldWidth();
 applyAvatarStyle();
 applyBlurStrength();
 applyShadowWidth();
-applyChatDisplay();
 switchMovingUI();
 noShadows();
 switchHotswap();
 switchTimer();
 switchTimestamps();
+switchMesIDDisplay();
 
 function loadPowerUserSettings(settings, data) {
     // Load from settings.json
@@ -557,18 +596,22 @@ function loadPowerUserSettings(settings, data) {
     const hotswap = localStorage.getItem(storage_keys.hotswap_enabled);
     const timer = localStorage.getItem(storage_keys.timer_enabled);
     const timestamps = localStorage.getItem(storage_keys.timestamps_enabled);
+    const mesIDDisplay = localStorage.getItem(storage_keys.mesIDDisplay_enabled);
     power_user.fast_ui_mode = fastUi === null ? true : fastUi == "true";
     power_user.movingUI = movingUI === null ? false : movingUI == "true";
     power_user.noShadows = noShadows === null ? false : noShadows == "true";
     power_user.hotswap_enabled = hotswap === null ? true : hotswap == "true";
     power_user.timer_enabled = timer === null ? true : timer == "true";
     power_user.timestamps_enabled = timestamps === null ? true : timestamps == "true";
+    power_user.mesIDDisplay_enabled = mesIDDisplay === null ? true : mesIDDisplay == "true";
     power_user.avatar_style = Number(localStorage.getItem(storage_keys.avatar_style) ?? avatar_styles.ROUND);
-    power_user.chat_display = Number(localStorage.getItem(storage_keys.chat_display) ?? chat_styles.DEFAULT);
+    //power_user.chat_display = Number(localStorage.getItem(storage_keys.chat_display) ?? chat_styles.DEFAULT);
     power_user.sheld_width = Number(localStorage.getItem(storage_keys.sheld_width) ?? sheld_width.DEFAULT);
     power_user.font_scale = Number(localStorage.getItem(storage_keys.font_scale) ?? 1);
     power_user.blur_strength = Number(localStorage.getItem(storage_keys.blur_strength) ?? 10);
 
+    $('#trim_spaces').prop("checked", power_user.trim_spaces);
+    $('#continue_on_send').prop("checked", power_user.continue_on_send);
     $('#auto_swipe').prop("checked", power_user.auto_swipe);
     $('#auto_swipe_minimum_length').val(power_user.auto_swipe_minimum_length);
     $('#auto_swipe_blacklist').val(power_user.auto_swipe_blacklist.join(", "));
@@ -598,6 +641,8 @@ function loadPowerUserSettings(settings, data) {
     $("#waifuMode").prop("checked", power_user.waifuMode);
     $("#movingUImode").prop("checked", power_user.movingUI);
     $("#noShadowsmode").prop("checked", power_user.noShadows);
+    $("#start_reply_with").val(power_user.user_prompt_bias);
+    $("#chat-show-reply-prefix-checkbox").prop("checked", power_user.show_user_prompt_bias);
     $("#multigen").prop("checked", power_user.multigen);
     $("#multigen_first_chunk").val(power_user.multigen_first_chunk);
     $("#multigen_next_chunks").val(power_user.multigen_next_chunks);
@@ -612,10 +657,11 @@ function loadPowerUserSettings(settings, data) {
     $("#hotswapEnabled").prop("checked", power_user.hotswap_enabled);
     $("#messageTimerEnabled").prop("checked", power_user.timer_enabled);
     $("#messageTimestampsEnabled").prop("checked", power_user.timestamps_enabled);
+    $("#mesIDDisplayEnabled").prop("checked", power_user.mesIDDisplay_enabled);
     $("#prefer_character_prompt").prop("checked", power_user.prefer_character_prompt);
     $("#prefer_character_jailbreak").prop("checked", power_user.prefer_character_jailbreak);
     $(`input[name="avatar_style"][value="${power_user.avatar_style}"]`).prop("checked", true);
-    $(`input[name="chat_display"][value="${power_user.chat_display}"]`).prop("checked", true);
+    $(`#chat_display option[value=${power_user.chat_display}]`).attr("selected", true).trigger('change');
     $(`input[name="sheld_width"][value="${power_user.sheld_width}"]`).prop("checked", true);
     $("#token_padding").val(power_user.token_padding);
 
@@ -897,6 +943,7 @@ async function saveTheme() {
         sheld_width: power_user.sheld_width,
         timer_enabled: power_user.timer_enabled,
         timestamps_enabled: power_user.timestamps_enabled,
+        mesIDDisplay_enabled: power_user.mesIDDisplay_enabled,
         hotswap_enabled: power_user.hotswap_enabled,
 
     };
@@ -987,10 +1034,75 @@ function doRandomChat() {
 
 }
 
-function doDelMode() {
-    setTimeout(() => {
-        $("#option_delete_mes").trigger('click')
-    }, 1);
+async function doMesCut(_, text) {
+
+    //reject invalid args or no args
+    if (text && isNaN(text) || !text) {
+        toastr.error(`Must enter a single number only, non-number characters disallowed.`)
+        return
+    }
+
+    //reject attempts to delete firstmes
+    if (text === 0) {
+        toastr.error('Cannot delete the First Message')
+        return
+    }
+
+    let mesIDToCut = Number(text).toFixed(0)
+    let mesToCut = $("#chat").find(`.mes[mesid=${mesIDToCut}]`)
+
+    if (!mesToCut.length) {
+        toastr.error(`Could not find message with ID: ${mesIDToCut}`)
+        return
+    }
+
+    mesToCut.find('.mes_edit_delete').trigger('click');
+    $('#dialogue_popup_ok').trigger('click');
+}
+
+
+async function doDelMode(_, text) {
+
+    //first enter delmode
+    $("#option_delete_mes").trigger('click')
+
+    //reject invalid args
+    if (text && isNaN(text)) {
+        toastr.warning('Must enter a number or nothing.')
+        await delay(300) //unsure why 300 is neccessary here, but any shorter and it wont see the delmode UI
+        $("#dialogue_del_mes_cancel").trigger('click');
+        return
+    }
+
+    //parse valid args
+    if (text) {
+        await delay(300) //same as above, need event signal for 'entered del mode'
+        console.debug('parsing msgs to del')
+        let numMesToDel = Number(text).toFixed(0)
+        let lastMesID = $('.last_mes').attr('mesid')
+        let oldestMesIDToDel = lastMesID - numMesToDel + 1;
+
+        //disallow targeting first message
+        if (oldestMesIDToDel <= 0) {
+            oldestMesIDToDel = 1
+        }
+
+        let oldestMesToDel = $('#chat').find(`.mes[mesid=${oldestMesIDToDel}]`)
+        let oldestDelMesCheckbox = $(oldestMesToDel).find('.del_checkbox');
+        let newLastMesID = oldestMesIDToDel - 1;
+        console.debug(`DelMesReport -- numMesToDel:  ${numMesToDel}, lastMesID: ${lastMesID}, oldestMesIDToDel:${oldestMesIDToDel}, newLastMesID: ${newLastMesID}`)
+        oldestDelMesCheckbox.trigger('click');
+        let trueNumberOfDeletedMessage = lastMesID - oldestMesIDToDel + 1
+
+        //await delay(1)
+        $('#dialogue_del_mes_ok').trigger('click');
+        toastr.success(`Deleted ${trueNumberOfDeletedMessage} messages.`)
+        return
+    }
+}
+
+function doResetPanels() {
+    $("#movingUIreset").trigger('click');
 }
 
 $(document).ready(() => {
@@ -1074,6 +1186,17 @@ $(document).ready(() => {
         reloadMarkdownProcessor(power_user.render_formulas);
     });
 
+    $("#start_reply_with").on('input', function() {
+        power_user.user_prompt_bias = $(this).val();
+        saveSettingsDebounced();
+    });
+
+    $("#chat-show-reply-prefix-checkbox").change(function () {
+        power_user.show_user_prompt_bias = !!$(this).prop("checked");
+        reloadCurrentChat();
+        saveSettingsDebounced();
+    })
+
     $("#multigen").change(function () {
         power_user.multigen = $(this).prop("checked");
         saveSettingsDebounced();
@@ -1112,10 +1235,13 @@ $(document).ready(() => {
         applyAvatarStyle();
     });
 
-    $(`input[name="chat_display"]`).on('input', function (e) {
-        power_user.chat_display = Number(e.target.value);
-        localStorage.setItem(storage_keys.chat_display, power_user.chat_display);
+    $("#chat_display").on('change', function () {
+        console.debug('###CHAT DISPLAY SELECTOR CHANGE###')
+        const value = $(this).find(':selected').val();
+        power_user.chat_display = Number(value);
+        saveSettingsDebounced();
         applyChatDisplay();
+
     });
 
     $(`input[name="sheld_width"]`).on('input', function (e) {
@@ -1163,12 +1289,6 @@ $(document).ready(() => {
         applyThemeColor('quote');
         saveSettingsDebounced();
     });
-
-    /*     $("#fastui-bg-color-picker").on('change', (evt) => {
-            power_user.fastui_bg_color = evt.detail.rgba;
-            applyThemeColor('fastUIBG');
-            saveSettingsDebounced();
-        }); */
 
     $("#blur-tint-color-picker").on('change', (evt) => {
         power_user.blur_tint_color = evt.detail.rgba;
@@ -1365,6 +1485,13 @@ $(document).ready(() => {
         switchTimestamps();
     });
 
+    $("#mesIDDisplayEnabled").on("input", function () {
+        const value = !!$(this).prop('checked');
+        power_user.mesIDDisplay_enabled = value;
+        localStorage.setItem(storage_keys.mesIDDisplay_enabled, power_user.mesIDDisplay_enabled);
+        switchMesIDDisplay();
+    });
+
     $("#hotswapEnabled").on("input", function () {
         const value = !!$(this).prop('checked');
         power_user.hotswap_enabled = value;
@@ -1384,6 +1511,18 @@ $(document).ready(() => {
         saveSettingsDebounced();
     });
 
+    $("#continue_on_send").on("input", function () {
+        const value = !!$(this).prop('checked');
+        power_user.continue_on_send = value;
+        saveSettingsDebounced();
+    });
+
+    $("#trim_spaces").on("input", function () {
+        const value = !!$(this).prop('checked');
+        power_user.trim_spaces = value;
+        saveSettingsDebounced();
+    });
+
     $(window).on('focus', function () {
         browser_has_focus = true;
     });
@@ -1392,8 +1531,10 @@ $(document).ready(() => {
         browser_has_focus = false;
     });
 
-    registerSlashCommand('vn', toggleWaifu, ['vn'], ' – swaps Visual Novel Mode On/Off', false, true);
+    registerSlashCommand('vn', toggleWaifu, [], ' – swaps Visual Novel Mode On/Off', false, true);
     registerSlashCommand('newchat', doNewChat, ['newchat'], ' – start a new chat with current character', true, true);
     registerSlashCommand('random', doRandomChat, ['random'], ' – start a new chat with a random character', true, true);
-    registerSlashCommand('delmode', doDelMode, ['delmode'], ' – enter message deletion mode', true, true);
+    registerSlashCommand('delmode', doDelMode, ['del'], '<span class="monospace">(optional number)</span> – enter message deletion mode, and auto-deletes N messages if numeric argument is provided', true, true);
+    registerSlashCommand('cut', doMesCut, [], ' <span class="monospace">(requred number)</span> – cuts the specified message from the chat', true, true);
+    registerSlashCommand('resetpanels', doResetPanels, ['resetui'], ' – resets UI panels to original state.', true, true);
 });
