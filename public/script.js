@@ -2489,6 +2489,7 @@ async function Generate(type, { automatic_trigger, force_name2, resolve, reject,
                     type: type,
                     quietPrompt: quiet_prompt,
                     jailbreakPrompt: jailbreakPrompt,
+                    cyclePrompt: cyclePrompt,
                 });
                 generate_data = { prompt: prompt };
 
@@ -4696,15 +4697,17 @@ async function getSettings(type) {
         $("#amount_gen_counter").text(`${amount_gen}`);
 
         //Load which API we are using
-        if (settings.main_api != undefined) {
-            main_api = settings.main_api;
-            $('#main_api').val(main_api);
-            $("#main_api option[value=" + main_api + "]").attr(
-                "selected",
-                "true"
-            );
-            changeMainAPI();
+        if (settings.main_api == undefined) {
+            settings.main_api = 'kobold';
         }
+
+        main_api = settings.main_api;
+        $('#main_api').val(main_api);
+        $("#main_api option[value=" + main_api + "]").attr(
+            "selected",
+            "true"
+        );
+        changeMainAPI();
 
         //Load User's Name and Avatar
 
@@ -6482,7 +6485,7 @@ $(document).ready(function () {
     }
 
     registerSlashCommand('dupe', DupeChar, [], "– duplicates the currently selected character", true, true);
-    registerSlashCommand('api', connectAPISlash, [], "– connect to an API", true, true);
+    registerSlashCommand('api', connectAPISlash, [], "(kobold, horde, novel, ooba, oai, claude, poe, windowai) – connect to an API", true, true);
 
     setTimeout(function () {
         $("#groupControlsToggle").trigger('click');
@@ -6494,7 +6497,7 @@ $(document).ready(function () {
         updateVisibleDivs('#rm_print_characters_block', true);
     }, 5));
 
-    $("#chat").on('mousewheel', () => {
+    $("#chat").on('mousewheel touchstart', () => {
         scrollLock = true;
     });
 
@@ -7868,8 +7871,8 @@ $(document).ready(function () {
         const pinnedDrawerClicked = drawer.hasClass('pinnedOpen');
 
         if (!drawerWasOpenAlready) { //to open the drawer
-            $('.openDrawer').not('.pinnedOpen').addClass('resizing').slideToggle(200, "swing", function () {
-                $(this).closest('.drawer-content').removeClass('resizing');
+            $('.openDrawer').not('.pinnedOpen').addClass('resizing').slideToggle(200, "swing", async function () {
+                await delay(50); $(this).closest('.drawer-content').removeClass('resizing');
             });
             $('.openIcon').toggleClass('closedIcon openIcon');
             $('.openDrawer').not('.pinnedOpen').toggleClass('closedDrawer openDrawer');
@@ -7882,16 +7885,17 @@ $(document).ready(function () {
                     duration: 200,
                     easing: "swing",
                     start: function () {
-                        jQuery(this).css('display', 'flex');
+                        jQuery(this).css('display', 'flex'); //flex needed to make charlist scroll
                     },
-                    complete: function () {
+                    complete: async function () {
+                        await delay(50);
                         $(this).closest('.drawer-content').removeClass('resizing');
                         $("#rm_print_characters_block").trigger("scroll");
                     }
                 })
             } else {
-                $(this).closest('.drawer').find('.drawer-content').addClass('resizing').slideToggle(200, "swing", function () {
-                    $(this).closest('.drawer-content').removeClass('resizing');
+                $(this).closest('.drawer').find('.drawer-content').addClass('resizing').slideToggle(200, "swing", async function () {
+                    await delay(50); $(this).closest('.drawer-content').removeClass('resizing');
                 });
             }
 
@@ -7900,13 +7904,13 @@ $(document).ready(function () {
             icon.toggleClass('closedIcon openIcon');
 
             if (pinnedDrawerClicked) {
-                $(drawer).addClass('resizing').slideToggle(200, "swing", function () {
-                    $(this).removeClass('resizing');
+                $(drawer).addClass('resizing').slideToggle(200, "swing", async function () {
+                    await delay(50); $(this).removeClass('resizing');
                 });
             }
             else {
-                $('.openDrawer').not('.pinnedOpen').addClass('resizing').slideToggle(200, "swing", function () {
-                    $(this).closest('.drawer-content').removeClass('resizing');
+                $('.openDrawer').not('.pinnedOpen').addClass('resizing').slideToggle(200, "swing", async function () {
+                    await delay(50); $(this).closest('.drawer-content').removeClass('resizing');
                 });
             }
 
@@ -8001,6 +8005,12 @@ $(document).ready(function () {
             loadMovingUIState();
             $(`.zoomed_avatar[forChar="${charname}"]`).css('display', 'block');
             dragElement(newElement)
+
+            $(`.zoomed_avatar[forChar="${charname}"] img`).on('dragstart', (e) => {
+                console.log('saw drag on avatar!');
+                e.preventDefault();
+                return false;
+            });
         }
     });
 
