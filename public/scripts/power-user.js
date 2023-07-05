@@ -185,6 +185,8 @@ let power_user = {
 
     persona_description: '',
     persona_description_position: persona_description_positions.BEFORE_CHAR,
+
+    patterns: {},
 };
 
 let themes = [];
@@ -690,6 +692,8 @@ function loadPowerUserSettings(settings, data) {
     $("#user-mes-blur-tint-color-picker").attr('color', power_user.user_mes_blur_tint_color);
     $("#bot-mes-blur-tint-color-picker").attr('color', power_user.bot_mes_blur_tint_color);
     $("#shadow-color-picker").attr('color', power_user.shadow_color);
+
+    loadExtraSettings();
 
     for (const theme of themes) {
         const option = document.createElement('option');
@@ -1538,6 +1542,8 @@ $(document).ready(() => {
         saveSettingsDebounced();
     });
 
+    saveExtraSettings()
+
     $(window).on('focus', function () {
         browser_has_focus = true;
     });
@@ -1553,3 +1559,30 @@ $(document).ready(() => {
     registerSlashCommand('cut', doMesCut, [], ' <span class="monospace">(requred number)</span> – cuts the specified message from the chat', true, true);
     registerSlashCommand('resetpanels', doResetPanels, ['resetui'], ' – resets UI panels to original state.', true, true);
 });
+
+function saveExtraSettings() {
+    // Extra Options
+    $('#codeblock_highlighting').on('input', function () {
+        power_user.codeblock_highlighting = !!$(this).prop('checked');
+        reloadCurrentChat();
+        saveSettingsDebounced();
+    });
+
+    handlePatternInput('#extra_tag_hide_thinking', 'tag_hide_thinking');
+    handlePatternInput('#extra_tag_replace_writing', 'tag_replace_writing');
+
+    function handlePatternInput(inputElement, propertyName) {
+        $(inputElement).on('input', function() {
+            power_user.patterns[propertyName] = $(this).val().trim();
+            console.log(`power_user.${propertyName}`, power_user.patterns[propertyName]);
+            saveSettingsDebounced();
+        });
+    }
+}
+
+function loadExtraSettings() {
+    // Extra Options
+    $('#codeblock_highlighting').prop("checked", power_user.codeblock_highlighting);
+    $('#extra_tag_hide_thinking').val(power_user.patterns.tag_hide_thinking);
+    $('#extra_tag_replace_writing').val(power_user.patterns.tag_replace_writing);
+}

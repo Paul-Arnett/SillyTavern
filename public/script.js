@@ -1071,9 +1071,12 @@ function messageFormatting(mes, ch_name, isSystem, isUser) {
         mes = fixMarkdown(mes);
     }
 
-    // Clean <thinking> tags from message
-    if (this_chid != undefined && !isUser && !isSystem) {
-        mes = mes.replace(/<thinking>[\s\S]*<\/thinking>\n*/m, '')
+    // Clean <thinking> nad others tags from message
+    if (this_chid != undefined && !isUser && !isSystem && power_user.patterns) {
+        let regex_thinking = new RegExp(`<${power_user.patterns.tag_hide_thinking}>[\\s\\S]*</${power_user.patterns.tag_hide_thinking}>\\n*`, 'm');
+        mes = mes.replace(regex_thinking, '');
+        let regex_writing = new RegExp(`</?${power_user.patterns.tag_replace_writing}>`, 'g');
+        mes = mes.replace(regex_writing, '```');
     }
 
     if (this_chid != undefined && !isSystem)
@@ -1194,7 +1197,7 @@ export function appendImageToMessage(mes, messageElement) {
 export function addCopyToCodeBlocks(messageElement) {
     const codeBlocks = $(messageElement).find("pre code");
     for (let i = 0; i < codeBlocks.length; i++) {
-        hljs.highlightElement(codeBlocks.get(i));
+        if (power_user.codeblock_highlighting) hljs.highlightElement(codeBlocks.get(i));
         if (navigator.clipboard !== undefined) {
             const copyButton = document.createElement('i');
             copyButton.classList.add('fa-solid', 'fa-copy', 'code-copy');
