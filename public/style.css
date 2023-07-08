@@ -1891,17 +1891,13 @@ grammarly-extension {
     aspect-ratio: 1 / 1;
 }
 
-.menu_button:hover {
+.menu_button:hover, .menu_button.active {
     background-color: var(--white30a);
 }
 
 .height32px {
     height: 32px;
 }
-
-
-
-
 
 #dialogue_del_mes .menu_button {
 
@@ -2340,6 +2336,7 @@ input[type='checkbox']:not(#nav-toggle):not(#rm_button_panel_pin):not(#lm_button
     font-size: calc(var(--mainFontSize) * 0.95);
     color: var(--SmartThemeBodyColor);
     flex: 1;
+    gap: 5px;
     display: flex;
 }
 
@@ -3773,16 +3770,39 @@ label[for="extensions_autoconnect"] {
 
 .extensions_info p {
     margin-bottom: 0.5em;
+    margin-left: 1em;
 }
 
 .extensions_info .disabled {
     color: lightgray;
 }
 
+.extensions_info .toggle_enable {
+    color: lightgreen;
+}
+.extensions_info .toggle_disable {
+    color: rgb(238, 144, 144);
+}
+
+.extensions_info .extension_enabled {
+    color: green;
+}
+.extensions_info .extension_disabled {
+    color: lightgray;
+}
+.extensions_info .extension_missing {
+    color: gray;
+}
+
 #extensions_list .disabled {
     text-decoration: line-through;
     color: lightgray;
 }
+
+/* possible place for WI Entry header styling */
+/* .world_entry_form .inline-drawer-header {
+    background-color: var(--SmartThemeShadowColor);
+} */
 
 #extensions_settings .inline-drawer-toggle.inline-drawer-header,
 #extensions_settings2 .inline-drawer-toggle.inline-drawer-header {
@@ -4413,6 +4433,9 @@ body.waifuMode .expression-holder {
     bottom: 0;
     filter: drop-shadow(2px 2px 2px #51515199);
     z-index: 2;
+    margin: 0 auto;
+    left: 0;
+    right: 0;
 }
 
 /* movingUI*/
@@ -4789,16 +4812,13 @@ body.waifuMode .zoomed_avatar {
 
     body.waifuMode .expression-holder {
         display: inline;
-        width: unset;
-        max-height: unset;
-        max-width: unset;
-        bottom: unset;
-        left: unset;
-        top: unset;
+
         height: 100vh;
-        width: 100vw;
+        width: max-content;
         margin: 0 auto;
         position: absolute;
+        left: 0;
+        right: 0;
         filter: drop-shadow(2px 2px 2px #51515199);
         z-index: 1;
     }
@@ -5093,4 +5113,3 @@ body.waifuMode .zoomed_avatar {
     text-align: center;
     line-height: 14px;
 }
-
