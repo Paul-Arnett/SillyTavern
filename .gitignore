@@ -22,3 +22,5 @@ secrets.json
 poe_device.json
 /backups/
 Start.ps1
+poe-error.log
+poe-success.log
