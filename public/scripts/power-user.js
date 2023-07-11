@@ -188,6 +188,7 @@ let power_user = {
     persona_description_position: persona_description_positions.BEFORE_CHAR,
 
     patterns: {},
+    custom_stopping_strings: '',
 };
 
 let themes = [];
@@ -653,6 +654,7 @@ function loadPowerUserSettings(settings, data) {
     $('#auto_swipe_minimum_length').val(power_user.auto_swipe_minimum_length);
     $('#auto_swipe_blacklist').val(power_user.auto_swipe_blacklist.join(", "));
     $('#auto_swipe_blacklist_threshold').val(power_user.auto_swipe_blacklist_threshold);
+    $('#custom_stopping_strings').val(power_user.custom_stopping_strings);
 
     $("#console_log_prompts").prop("checked", power_user.console_log_prompts);
     $('#auto_fix_generated_markdown').prop("checked", power_user.auto_fix_generated_markdown);
@@ -1385,6 +1387,25 @@ function setAvgBG() {
 
 }
 
+export function getCustomStoppingStrings() {
+    try {
+        // Parse the JSON string
+        const strings = JSON.parse(power_user.custom_stopping_strings);
+
+        // Make sure it's an array
+        if (!Array.isArray(strings)) {
+            return [];
+        }
+
+        // Make sure all the elements are strings
+        return strings.filter((s) => typeof s === 'string');
+    } catch (error) {
+        // If there's an error, return an empty array
+        console.warn('Error parsing custom stopping strings:', error);
+        return [];
+    }
+}
+
 $(document).ready(() => {
 
     $(window).on('resize', async () => {
@@ -1836,6 +1857,11 @@ $(document).ready(() => {
     $('#spoiler_free_desc_button').on('click', function () {
         peekSpoilerMode();
         $(this).toggleClass('fa-eye fa-eye-slash');
+    });
+
+    $('#custom_stopping_strings').on('input', function () {
+        power_user.custom_stopping_strings = $(this).val();
+        saveSettingsDebounced();
     });
 
     $(window).on('focus', function () {
