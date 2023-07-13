@@ -581,6 +581,8 @@ function getTokenCount(str, padding = undefined) {
             return countTokensRemote('/tokenize_nerdstash', str, padding);
         case tokenizers.NERD2:
             return countTokensRemote('/tokenize_nerdstash_v2', str, padding);
+        case tokenizers.API:
+            return countTokensRemote('/tokenize_via_api', str, padding);
         default:
             console.warn("Unknown tokenizer type", tokenizerType);
             return Math.ceil(str.length / CHARACTERS_PER_TOKEN_RATIO) + padding;
@@ -1146,15 +1148,17 @@ function messageFormatting(mes, ch_name, isSystem, isUser) {
         let regexPlacement;
         if (isUser) {
             regexPlacement = regex_placement.USER_INPUT;
-        } else if (ch_name === "System") {
-            regexPlacement = regex_placement.SYSTEM;
         } else if (ch_name !== name2) {
-            regexPlacement = regex_placement.SENDAS;
+            regexPlacement = regex_placement.SLASH_COMMAND;
         } else {
             regexPlacement = regex_placement.AI_OUTPUT;
         }
 
-        mes = getRegexedString(mes, regexPlacement, { isMarkdown: true });
+        // Always override the character name
+        mes = getRegexedString(mes, regexPlacement, {
+            characterOverride: ch_name,
+            isMarkdown: true
+        });
     }
 
     if (power_user.auto_fix_generated_markdown) {
@@ -2271,9 +2275,9 @@ async function Generate(type, { automatic_trigger, force_name2, resolve, reject,
 
             chat2[i] = formatMessageHistoryItem(coreChat[j], isInstruct);
 
-            // Do not format the message for continuation
+            // Do not suffix the message for continuation
             if (i === 0 && type == 'continue') {
-                chat2[i] = coreChat[j].mes;
+                chat2[i] = chat2[i].slice(0, chat2[i].lastIndexOf(coreChat[j].mes) + coreChat[j].mes.length);
             }
         }
 
@@ -5076,24 +5080,23 @@ function updateMessage(div) {
     const mesBlock = div.closest(".mes_block");
     let text = mesBlock.find(".edit_textarea").val();
     const mes = chat[this_edit_mes_id];
+
     let regexPlacement;
-    if (mes.is_name && !mes.is_user && mes.name !== name2) {
-        regexPlacement = regex_placement.SENDAS;
-    } else if (mes.is_name && !mes.is_user) {
-        regexPlacement = regex_placement.AI_OUTPUT;
-    } else if (mes.is_name && mes.is_user) {
+    if (mes.is_name && mes.is_user) {
         regexPlacement = regex_placement.USER_INPUT;
-    } else if (mes.extra?.type === "narrator") {
-        regexPlacement = regex_placement.SYSTEM;
+    } else if (mes.is_name && mes.name === name2) {
+        regexPlacement = regex_placement.AI_OUTPUT;
+    } else if (mes.is_name && mes.name !== name2 || mes.extra?.type === "narrator") {
+        regexPlacement = regex_placement.SLASH_COMMAND;
     }
 
+    // Ignore character override if sent as system
     text = getRegexedString(
-        text,
-        regexPlacement,
-        {
-            characterOverride: regexPlacement === regex_placement.SENDAS ? mes.name : undefined
-        }
+        text, 
+        regexPlacement, 
+        { characterOverride: mes.extra?.type === "narrator" ? undefined : mes.name }
     );
+
 
     if (power_user.trim_spaces) {
         text = text.trim();

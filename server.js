@@ -1026,6 +1026,56 @@ app.post("/editcharacter", urlencodedParser, async function (request, response) 
     }
 });
 
+
+/**
+ * Handle a POST request to edit a character attribute.
+ *
+ * This function reads the character data from a file, updates the specified attribute,
+ * and writes the updated data back to the file.
+ *
+ * @param {Object} request - The HTTP request object.
+ * @param {Object} response - The HTTP response object.
+ * @returns {void}
+ */
+app.post("/editcharacterattribute", jsonParser, async function (request, response) {
+    console.log(request.body);
+    if (!request.body) {
+        console.error('Error: no response body detected');
+        response.status(400).send('Error: no response body detected');
+        return;
+    }
+
+    if (request.body.ch_name === '' || request.body.ch_name === undefined || request.body.ch_name === '.') {
+        console.error('Error: invalid name.');
+        response.status(400).send('Error: invalid name.');
+        return;
+    }
+
+    try {
+        const avatarPath = path.join(charactersPath, request.body.avatar_url);
+        charaRead(avatarPath).then((char) => {
+            char = JSON.parse(char);
+            //check if the field exists
+            if (char[request.body.field] === undefined || char.data[request.body.field] === undefined) {
+                console.error('Error: invalid field.');
+                response.status(400).send('Error: invalid field.');
+                return;
+            }
+            char[request.body.field] = request.body.value;
+            char.data[request.body.field] = request.body.value;
+            char = JSON.stringify(char);
+            return { char };
+        }).then(({ char }) => {
+            charaWrite(avatarPath, char, (request.body.avatar_url).replace('.png', ''), response, 'Character saved');
+        }).catch((err) => {
+            console.error('An error occured, character edit invalidated.', err);
+        } );
+    }
+    catch {
+        console.error('An error occured, character edit invalidated.');
+    }
+});
+
 app.post("/deletecharacter", urlencodedParser, function (request, response) {
     if (!request.body || !request.body.avatar_url) {
         return response.sendStatus(400);
@@ -3245,7 +3295,7 @@ app.post("/generate_openai", jsonParser, function (request, response_generate_op
         return response_generate_openai.status(401).send({ error: true });
     }
 
-    const isTextCompletion = request.body.model.startsWith('text-') || request.body.model.startsWith('code-');
+    const isTextCompletion = Boolean(request.body.model && (request.body.model.startsWith('text-') || request.body.model.startsWith('code-')));
     const textPrompt = isTextCompletion ? convertChatMLPrompt(request.body.messages) : '';
     const endpointUrl = isTextCompletion ? `${api_url}/completions` : `${api_url}/chat/completions`;
 
@@ -3273,6 +3323,7 @@ app.post("/generate_openai", jsonParser, function (request, response_generate_op
             "presence_penalty": request.body.presence_penalty,
             "frequency_penalty": request.body.frequency_penalty,
             "top_p": request.body.top_p,
+            "top_k": request.body.top_k,
             "stop": request.body.stop,
             "logit_bias": request.body.logit_bias
         },
@@ -3401,6 +3452,27 @@ function createTokenizationHandler(getTokenizerFn) {
 app.post("/tokenize_llama", jsonParser, createTokenizationHandler(() => spp_llama));
 app.post("/tokenize_nerdstash", jsonParser, createTokenizationHandler(() => spp_nerd));
 app.post("/tokenize_nerdstash_v2", jsonParser, createTokenizationHandler(() => spp_nerd_v2));
+app.post("/tokenize_via_api", jsonParser, async function(request, response) {
+    if (!request.body) {
+        return response.sendStatus(400);
+    }
+    const text = request.body.text || '';
+
+    try {
+        const args = {
+            body: JSON.stringify({"prompt": text}),
+            headers: { "Content-Type": "application/json" }
+        };
+
+        const data = await postAsync(api_server + "/v1/token-count", args);
+        console.log(data);
+        return response.send({ count: data['results'][0]['tokens'] });
+    } catch (error) {
+        console.log(error);
+        return response.send({ error: true });
+    }
+});
+
 
 // ** REST CLIENT ASYNC WRAPPERS **
 

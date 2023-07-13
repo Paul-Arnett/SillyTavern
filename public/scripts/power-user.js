@@ -75,6 +75,7 @@ const tokenizers = {
     LLAMA: 3,
     NERD: 4,
     NERD2: 5,
+    API: 6,
 }
 
 const send_on_enter_options = {
@@ -406,6 +407,8 @@ function applyChatDisplay() {
 }
 
 function applySheldWidth() {
+    //disabled due to 50vw conversion
+    return
     power_user.sheld_width = Number(localStorage.getItem(storage_keys.sheld_width) ?? chat_styles.DEFAULT);
     $("body").toggleClass("w1000px", power_user.sheld_width === sheld_width.w1000px);
     let r = document.documentElement;
