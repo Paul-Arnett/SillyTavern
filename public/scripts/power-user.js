@@ -16,7 +16,8 @@ import {
     name1,
     name2,
     replaceCurrentChat,
-    setCharacterId
+    setCharacterId,
+    setEditedMessageId
 } from "../script.js";
 import { favsToHotswap, isMobile, initMovingUI } from "./RossAscends-mods.js";
 import {
@@ -745,8 +746,23 @@ function loadPowerUserSettings(settings, data) {
     switchWaifuMode();
     switchSpoilerMode();
     loadMovingUIState();
+    loadCharListState();
 
     //console.log(power_user)
+}
+
+async function loadCharListState() {
+    if (document.getElementById('CharID0') !== null) {
+        console.debug('setting charlist state to...')
+        if (power_user.charListGrid === true) {
+            console.debug('..to grid')
+            $("#charListGridToggle").trigger('click')
+        } else { console.debug('..to list') }
+    } else {
+        console.debug('charlist not ready yet')
+        await delay(100)
+        loadCharListState();
+    }
 }
 
 function loadMovingUIState() {
@@ -1030,6 +1046,7 @@ async function resetMovablePanels(type) {
         'WorldInfo',
         'floatingPrompt',
         'expression-holder',
+        'groupMemberListPopout'
     ];
 
     const panelStyles = ['top', 'left', 'right', 'bottom', 'height', 'width', 'margin',];
@@ -1092,7 +1109,7 @@ function doRandomChat() {
 }
 
 async function doMesCut(_, text) {
-
+    console.debug(`was asked to cut message id #${text}`)
     //reject invalid args or no args
     if (text && isNaN(text) || !text) {
         toastr.error(`Must enter a single number only, non-number characters disallowed.`)
@@ -1100,7 +1117,7 @@ async function doMesCut(_, text) {
     }
 
     //reject attempts to delete firstmes
-    if (text === 0) {
+    if (text === '0') {
         toastr.error('Cannot delete the First Message')
         return
     }
@@ -1113,8 +1130,8 @@ async function doMesCut(_, text) {
         return
     }
 
-    mesToCut.find('.mes_edit_delete').trigger('click');
-    $('#dialogue_popup_ok').trigger('click');
+    setEditedMessageId(mesIDToCut);
+    mesToCut.find('.mes_edit_delete').trigger('click', { fromSlashCommand: true });
 }
 
 

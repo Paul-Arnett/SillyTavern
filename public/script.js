@@ -3231,7 +3231,7 @@ function promptItemize(itemizedPrompts, requestedMesId) {
         var storyStringTokens = getTokenCount(itemizedPrompts[thisPromptSet].storyString) - worldInfoStringTokens;
         var examplesStringTokens = getTokenCount(itemizedPrompts[thisPromptSet].examplesString);
         var mesSendStringTokens = getTokenCount(itemizedPrompts[thisPromptSet].mesSendString)
-        var ActualChatHistoryTokens = mesSendStringTokens - (allAnchorsTokens - afterScenarioAnchorTokens)  + power_user.token_padding;
+        var ActualChatHistoryTokens = mesSendStringTokens - (allAnchorsTokens - afterScenarioAnchorTokens) + power_user.token_padding;
         var instructionTokens = getTokenCount(itemizedPrompts[thisPromptSet].instruction);
 
         var totalTokensInPrompt =
@@ -5092,8 +5092,8 @@ function updateMessage(div) {
 
     // Ignore character override if sent as system
     text = getRegexedString(
-        text, 
-        regexPlacement, 
+        text,
+        regexPlacement,
         { characterOverride: mes.extra?.type === "narrator" ? undefined : mes.name }
     );
 
@@ -5584,6 +5584,9 @@ function callPopup(text, type, inputValue = '', { okButton, rows } = {}) {
         case "char_not_selected":
             $("#dialogue_popup_ok").text(okButton ?? "Ok");
             $("#dialogue_popup_cancel").css("display", "none");
+            break;
+        case "delete_extension":
+            $("#dialogue_popup_ok").text(okButton ?? "Ok");
             break;
         case "new_chat":
         case "confirm":
@@ -6794,8 +6797,21 @@ async function importFromURL(items, files) {
     }
 }
 
+async function doImpersonate() {
+    $('#send_textarea').val('');
+    $("#option_impersonate").trigger('click', { fromSlashCommand: true })
+}
+
 const isPwaMode = window.navigator.standalone;
 if (isPwaMode) { $("body").addClass('PWA') }
+
+function doCharListDisplaySwitch() {
+    console.debug('toggling body charListGrid state')
+    $("body").toggleClass('charListGrid')
+    power_user.charListGrid = $("body").hasClass("charListGrid") ? true : false;
+    saveSettingsDebounced()
+    updateVisibleDivs('#rm_print_characters_block', true);
+}
 
 $(document).ready(function () {
 
@@ -6808,6 +6824,8 @@ $(document).ready(function () {
 
     registerSlashCommand('dupe', DupeChar, [], "– duplicates the currently selected character", true, true);
     registerSlashCommand('api', connectAPISlash, [], "(kobold, horde, novel, ooba, oai, claude, poe, windowai) – connect to an API", true, true);
+    registerSlashCommand('impersonate', doImpersonate, ['imp'], "- calls an impersonation response", true, true);
+
 
     setTimeout(function () {
         $("#groupControlsToggle").trigger('click');
@@ -7130,9 +7148,11 @@ $(document).ready(function () {
                 " -- Name: " +
                 characters[this_chid].name
             );
+            const delete_chats = !!$("#del_char_checkbox").prop("checked");
             const avatar = characters[this_chid].avatar;
             const name = characters[this_chid].name;
-            var msg = jQuery("#form_create").serialize(); // ID form
+            const msg = new FormData($("#form_create").get(0)); // ID form
+            msg.append("delete_chats", delete_chats);
             jQuery.ajax({
                 method: "POST",
                 url: "/deletecharacter",
@@ -7140,6 +7160,8 @@ $(document).ready(function () {
                 },
                 data: msg,
                 cache: false,
+                contentType: false,
+                processData: false,
                 success: async function (html) {
                     //RossAscends: New handling of character deletion that avoids page refreshes and should have
                     // fixed char corruption due to cache problems.
@@ -7257,8 +7279,10 @@ $(document).ready(function () {
         callPopup(`
                 <h3>Delete the character?</h3>
                 <b>THIS IS PERMANENT!<br><br>
-                THIS WILL ALSO DELETE ALL<br>
-                OF THE CHARACTER'S CHAT FILES.<br><br></b>`
+                <label for="del_char_checkbox" class="checkbox_label justifyCenter">
+                    <input type="checkbox" id="del_char_checkbox" checked />
+                    <span>Also delete the chat files</span>
+                </label><br></b>`
         );
     });
 
@@ -7539,7 +7563,7 @@ $(document).ready(function () {
         }
 
         else if (id == "option_impersonate") {
-            if (is_send_press == false) {
+            if (is_send_press == false || fromSlashCommand) {
                 is_send_press = true;
                 Generate("impersonate");
             }
@@ -7959,8 +7983,9 @@ $(document).ready(function () {
     });
 
 
-    $(document).on("click", ".mes_edit_delete", async function () {
-        if (power_user.confirm_message_delete) {
+    $(document).on("click", ".mes_edit_delete", async function (event, customData) {
+        const fromSlashCommand = customData?.fromSlashCommand || false;
+        if (power_user.confirm_message_delete && fromSlashCommand !== true) {
             const confirmation = await callPopup("Are you sure you want to delete this message?", 'confirm');
             if (!confirmation) {
                 return;
@@ -8526,6 +8551,52 @@ $(document).ready(function () {
         }
     });
 
+    /**
+     * Handles the click event for the third-party extension import button.
+     * Prompts the user to enter the Git URL of the extension to import.
+     * After obtaining the Git URL, makes a POST request to '/get_extension' to import the extension.
+     * If the extension is imported successfully, a success message is displayed.
+     * If the extension import fails, an error message is displayed and the error is logged to the console.
+     * After successfully importing the extension, the extension settings are reloaded and a 'EXTENSION_SETTINGS_LOADED' event is emitted.
+     *
+     * @listens #third_party_extension_button#click - The click event of the '#third_party_extension_button' element.
+     */
+    $('#third_party_extension_button').on('click', async () => {
+        const html = `<h3>Enter the Git URL of the extension to import</h3>
+    <br>
+    <p><b>Disclaimer:</b> Please be aware that using external extensions can have unintended side effects and may pose security risks. Always make sure you trust the source before importing an extension. We are not responsible for any damage caused by third-party extensions.</p>
+    <br>
+    <p>Example: <tt> https://github.com/author/extension-name </tt></p>`
+        const input = await callPopup(html, 'input');
+
+        if (!input) {
+            console.debug('Extension import cancelled');
+            return;
+        }
+
+        const url = input.trim();
+        console.debug('Extension import started', url);
+
+        const request = await fetch('/get_extension', {
+            method: 'POST',
+            headers: getRequestHeaders(),
+            body: JSON.stringify({ url }),
+        });
+
+        if (!request.ok) {
+            toastr.info(request.statusText, 'Extension import failed');
+            console.error('Extension import failed', request.status, request.statusText);
+            return;
+        }
+
+        const response = await request.json();
+        toastr.success(`Extension "${response.display_name}" by ${response.author} (version ${response.version}) has been imported successfully!`, 'Extension import successful');
+        console.debug(`Extension "${response.display_name}" has been imported successfully at ${response.extensionPath}`);
+        await loadExtensionSettings(settings);
+        eventSource.emit(event_types.EXTENSION_SETTINGS_LOADED);
+    });
+
+
     const $dropzone = $(document.body);
 
     $dropzone.on('dragover', (event) => {
@@ -8565,4 +8636,8 @@ $(document).ready(function () {
             }
         }
     }
+
+    $("#charListGridToggle").on('click', async () => {
+        doCharListDisplaySwitch();
+    });
 })

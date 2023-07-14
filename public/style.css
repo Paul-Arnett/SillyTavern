@@ -396,6 +396,20 @@ hr {
     opacity: 1;
 }
 
+.panelControlBar {
+    position: absolute;
+    right: 5px;
+    top: 5px;
+    margin-right: 5px;
+    z-index: 2000;
+}
+
+.panelControlBar .drag-grabber {
+    position: unset;
+}
+
+
+
 #sheldheader:active {
     cursor: grabbing;
     cursor: -moz-grabbing;
@@ -438,6 +452,13 @@ hr {
     width: 100%;
     margin: 1px auto 0 auto;
     z-index: 30;
+}
+
+/* special case for desktop Safari to allow #sheld resizing */
+@media only screen and (min-width: 1024px) and (-webkit-min-device-pixel-ratio: 2) and (pointer: fine) {
+    #form_sheld {
+        margin-bottom: 5px;
+    }
 }
 
 #send_form {
@@ -1175,8 +1196,60 @@ input[type="file"] {
     overflow-y: auto;
     flex-grow: 1;
     display: flex;
-    flex-direction: column;
     /* row-gap: 5px; */
+}
+
+body.charListGrid #rm_print_characters_block {
+    display: flex;
+    gap: 5px;
+    flex-wrap: wrap;
+    flex-direction: row;
+    justify-content: space-around;
+}
+
+body.charListGrid #rm_print_characters_block .character_select {
+    width: 30%;
+    align-items: flex-start;
+    height: min-content;
+    flex-direction: column;
+    overflow: hidden;
+    max-width: 100px;
+}
+
+body.charListGrid #rm_print_characters_block .character_select .ch_name,
+body.charListGrid #rm_print_characters_block .group_select .ch_name {
+    width: 100%;
+    max-width: 100px;
+    text-align: center;
+    font-size: calc(var(--mainFontSize) * .8);
+}
+
+body.charListGrid #rm_print_characters_block .character_select .character_name_block {
+    width: 100%;
+}
+
+body.charListGrid #rm_print_characters_block .character_select .character_select_container {
+    width: 100%;
+    justify-content: center;
+    max-width: 100px;
+}
+
+body.charListGrid #rm_print_characters_block .group_select {
+    width: 30%;
+    height: min-content;
+    align-items: center !important;
+    flex-direction: column;
+    overflow: hidden;
+    max-width: 100px;
+}
+
+body.charListGrid #rm_print_characters_block .group_select .group_name_block {
+    width: 100%;
+}
+
+body.charListGrid #rm_print_characters_block .ch_description,
+body.charListGrid #rm_print_characters_block .tags_inline {
+    display: none;
 }
 
 #rm_ch_create_block {
@@ -1363,6 +1436,10 @@ input[type=search]:focus::-webkit-search-cancel-button {
 
 }
 
+.heightMinContent {
+    height: min-content;
+}
+
 /*applies to char list and mes_text char display name*/
 
 .ch_name {
@@ -1406,9 +1483,10 @@ body.big-avatars .ch_description {
 #rm_print_characters_block .ch_name {
     width: 100%;
     white-space: nowrap;
-    max-width: calc(100% - 29px);
+    /* max-width: calc(100% - 29px); */
     overflow: hidden;
     text-overflow: ellipsis;
+    display: block;
 }
 
 .character_select:hover {
@@ -3364,10 +3442,13 @@ body .ui-widget-content li:hover {
 
 body:not(.big-avatars) .avatar_collage {
     min-width: 50px;
+    aspect-ratio: 1 / 1;
 }
 
 body.big-avatars .avatar_collage {
     min-width: 60px;
+    max-width: 60px;
+    aspect-ratio: 2 / 3;
 }
 
 
@@ -3654,6 +3735,7 @@ a {
     overflow: hidden;
     scrollbar-width: thin;
     flex-flow: column;
+    min-width: 100px;
 }
 
 #nav-toggle {
@@ -3826,9 +3908,25 @@ label[for="extensions_autoconnect"] {
     color: gray;
 }
 
+input.extension_missing[type="checkbox"] {
+    opacity: 0.5;
+}
+
 #extensions_list .disabled {
     text-decoration: line-through;
     color: lightgray;
+}
+
+.update-button {
+    margin-right: 10px;
+    display: inline-flex;
+}
+
+/* Align the content of this span to the right */
+.delete-button {
+    margin-right: 10px;
+    display: inline-flex;
+
 }
 
 /* possible place for WI Entry header styling */
@@ -4080,6 +4178,18 @@ toolcool-color-picker {
     text-overflow: ellipsis;
 }
 
+.maxWidth200px {
+    max-width: 200px;
+}
+
+.alignContentFlexStart {
+    align-content: flex-start;
+}
+
+.overflowHidden {
+    overflow: hidden;
+}
+
 .padding5 {
     padding: 5px;
 }
@@ -4122,6 +4232,10 @@ toolcool-color-picker {
 
 .wide50p {
     width: 50% !important;
+}
+
+.wide25p {
+    width: 25%;
 }
 
 .wide30p {
@@ -4487,7 +4601,8 @@ body.movingUI #sheld,
 body.movingUI .drawer-content,
 body.movingUI #expression-holder,
 body.movingUI .zoomed_avatar,
-body.movingUI #floatingPrompt {
+body.movingUI #floatingPrompt,
+body.movingUI #groupMemberListPopout {
     resize: both;
 }
 
@@ -4513,7 +4628,8 @@ body.noShadows * {
     color: var(--SmartThemeBodyColor);
 }
 
-.zoomed_avatar {
+.zoomed_avatar,
+#groupMemberListPopout {
     min-width: 100px;
     min-height: 100px;
     max-height: 90vh;
@@ -4527,6 +4643,38 @@ body.noShadows * {
     display: none;
     bottom: 0;
     aspect-ratio: 2 / 3;
+    border-radius: 10px;
+}
+
+#groupMemberListPopoutClose {
+    height: 15px;
+    aspect-ratio: 1 / 1;
+    font-size: 20px;
+    opacity: 0.5;
+    transition: all 250ms;
+}
+
+#groupMemberListPopout {
+    aspect-ratio: unset;
+    padding: 0;
+    backdrop-filter: blur(var(--SmartThemeBlurStrength));
+    background-color: var(--SmartThemeBlurTintColor);
+    overflow: auto;
+}
+
+#groupMemberListPopout #rm_group_members {
+    /*     background-color: var(--SmartThemeBlurTintColor); */
+
+    margin: 0;
+    padding: 0;
+    padding-top: 20px;
+
+}
+
+.hoverglow:hover {
+    opacity: 1 !important;
+    cursor: pointer;
+
 }
 
 body.waifuMode .zoomed_avatar {
@@ -4615,6 +4763,8 @@ body.waifuMode .zoomed_avatar {
 /*will apply to anything 1000px or less. this catches ipads, horizontal phones, and vertical phones)*/
 
 @media screen and (max-width: 1000px) {
+
+
 
     #extensions_settings,
     #extensions_settings2 {
@@ -4777,7 +4927,8 @@ body.waifuMode .zoomed_avatar {
 
     }
 
-    #showRawPrompt {
+    #showRawPrompt,
+    #groupCurrentMemberPopoutButton {
         display: none;
     }
 
