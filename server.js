@@ -2984,7 +2984,7 @@ app.post("/getstatus_openai", jsonParser, function (request, response_getstatus_
     }
 
     if (!api_key_openai) {
-        return response_getstatus_openai.status(401).send({ error: true });
+        // return response_getstatus_openai.status(401).send({ error: true }); - keyless_api support
     }
 
     const args = {

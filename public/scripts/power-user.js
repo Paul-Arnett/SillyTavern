@@ -1909,6 +1909,11 @@ function saveExtraSettings() {
         saveSettingsDebounced();
     });
 
+    $('#keyless_api').on('input', function () {
+        power_user.keyless_api = !!$(this).prop('checked');
+        saveSettingsDebounced();
+    });
+
     handlePatternInput('#extra_tag_hide_thinking', 'tag_hide_thinking');
     handlePatternInput('#extra_tag_replace_writing', 'tag_replace_writing');
 
@@ -1924,6 +1929,7 @@ function saveExtraSettings() {
 function loadExtraSettings() {
     // Extra Options
     $('#codeblock_highlighting').prop("checked", power_user.codeblock_highlighting);
+    $('#keyless_api').prop("checked", power_user.keyless_api);
     $('#extra_tag_hide_thinking').val(power_user.patterns.tag_hide_thinking);
     $('#extra_tag_replace_writing').val(power_user.patterns.tag_replace_writing);
 }

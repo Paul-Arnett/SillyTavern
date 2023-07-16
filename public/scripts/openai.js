@@ -772,11 +772,12 @@ async function sendOpenAIRequest(type, openai_msgs_tosend, signal) {
         generate_data['api_url_scale'] = oai_settings.api_url_scale;
     }
 
-    const generate_url = '/generate_openai';
+    const generate_url = power_user.keyless_api ? oai_settings.reverse_proxy + '/v1/chat/completions' : '/generate_openai';
+    const req_headers = power_user.keyless_api ? { "Content-Type": "application/json", "Authorization": "Bearer ", } : getRequestHeaders();
     const response = await fetch(generate_url, {
         method: 'POST',
         body: JSON.stringify(generate_data),
-        headers: getRequestHeaders(),
+        headers: req_headers,
         signal: signal,
     });
 
@@ -797,6 +798,7 @@ async function sendOpenAIRequest(type, openai_msgs_tosend, signal) {
 
                 tryParseStreamingError(response);
 
+                // data: {"id":"ant-2674df6935697aa830705d951cc26efb997a72e39174f1ba7880ce2594682d52","object":"chat.completion.chunk","created":1689476894706,"model":"claude-2.0","choices":[{"index":0,"delta":{"content":"."},"finish_reason":null}]} 
                 let eventList = [];
 
                 // ReadableStream's buffer is not guaranteed to contain full SSE messages as they arrive in chunks
@@ -824,6 +826,7 @@ async function sendOpenAIRequest(type, openai_msgs_tosend, signal) {
                         return;
                     }
                     let data = JSON.parse(event.substring(6));
+                    // toastr.info(`Proxy Model: ${data.model}`);
                     // the first and last messages are undefined, protect against that
                     getMessage = getStreamingReply(getMessage, data);
                     yield getMessage;
@@ -1895,7 +1898,7 @@ async function onConnectButtonClick(e) {
             await writeSecret(SECRET_KEYS.CLAUDE, api_key_claude);
         }
 
-        if (!secret_state[SECRET_KEYS.CLAUDE]) {
+        if (!power_user.keyless_api && !secret_state[SECRET_KEYS.CLAUDE]) {
             console.log('No secret key saved for Claude');
             return;
         }
@@ -1908,7 +1911,7 @@ async function onConnectButtonClick(e) {
             await writeSecret(SECRET_KEYS.OPENAI, api_key_openai);
         }
 
-        if (!secret_state[SECRET_KEYS.OPENAI]) {
+        if (!power_user.keyless_api && !secret_state[SECRET_KEYS.OPENAI]) {
             console.log('No secret key saved for OpenAI');
             return;
         }
