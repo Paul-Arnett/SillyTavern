@@ -543,9 +543,9 @@ function getSystemPrompt(systemPrompt, nsfw_toggle_prompt, enhance_definitions_p
     return whole_prompt;
 }
 
-function tryParseStreamingError(str) {
+function tryParseStreamingError(response, decoded) {
     try {
-        const data = JSON.parse(str);
+        const data = JSON.parse(decoded);
 
         if (!data) {
             return;
@@ -554,7 +554,7 @@ function tryParseStreamingError(str) {
         checkQuotaError(data);
 
         if (data.error) {
-            toastr.error(response.statusText, 'API returned an error');
+            toastr.error(data.error.message || response.statusText, 'API returned an error');
             throw new Error(data);
         }
     }
@@ -789,14 +789,14 @@ async function sendOpenAIRequest(type, openai_msgs_tosend, signal) {
             let messageBuffer = "";
             while (true) {
                 const { done, value } = await reader.read();
-                let response = decoder.decode(value);
+                let decoded = decoder.decode(value);
 
                 // Claude's streaming SSE messages are separated by \r
                 if (oai_settings.chat_completion_source == chat_completion_sources.CLAUDE) {
-                    response = response.replace(/\r/g, "");
+                    decoded = decoded.replace(/\r/g, "");
                 }
 
-                tryParseStreamingError(response);
+                tryParseStreamingError(response, decoded);
 
                 // data: {"id":"ant-2674df6935697aa830705d951cc26efb997a72e39174f1ba7880ce2594682d52","object":"chat.completion.chunk","created":1689476894706,"model":"claude-2.0","choices":[{"index":0,"delta":{"content":"."},"finish_reason":null}]} 
                 let eventList = [];
@@ -804,12 +804,12 @@ async function sendOpenAIRequest(type, openai_msgs_tosend, signal) {
                 // ReadableStream's buffer is not guaranteed to contain full SSE messages as they arrive in chunks
                 // We need to buffer chunks until we have one or more full messages (separated by double newlines)
                 if (!oai_settings.legacy_streaming) {
-                    messageBuffer += response;
+                    messageBuffer += decoded;
                     eventList = messageBuffer.split("\n\n");
                     // Last element will be an empty string or a leftover partial message
                     messageBuffer = eventList.pop();
                 } else {
-                    eventList = response.split("\n");
+                    eventList = decoded.split("\n");
                 }
 
                 for (let event of eventList) {
@@ -844,7 +844,7 @@ async function sendOpenAIRequest(type, openai_msgs_tosend, signal) {
         checkQuotaError(data);
 
         if (data.error) {
-            toastr.error(response.statusText, 'API returned an error');
+            toastr.error(data.error.message || response.statusText, 'API returned an error');
             throw new Error(data);
         }
 
@@ -1006,30 +1006,50 @@ export function getTokenizerModel() {
         return oai_settings.openai_model;
     }
 
+    const turboTokenizer = 'gpt-3.5-turbo';
+    const gpt4Tokenizer = 'gpt-4';
+    const gpt2Tokenizer = 'gpt2';
+    const claudeTokenizer = 'claude';
+
     // Assuming no one would use it for different models.. right?
     if (oai_settings.chat_completion_source == chat_completion_sources.SCALE) {
-        return 'gpt-4';
+        return gpt4Tokenizer;
     }
 
-    const turboTokenizer = 'gpt-3.5-turbo'
     // Select correct tokenizer for WindowAI proxies
-    if (oai_settings.chat_completion_source == chat_completion_sources.WINDOWAI) {
+    if (oai_settings.chat_completion_source == chat_completion_sources.WINDOWAI && oai_settings.windowai_model) {
         if (oai_settings.windowai_model.includes('gpt-4')) {
-            return 'gpt-4';
+            return gpt4Tokenizer;
         }
         else if (oai_settings.windowai_model.includes('gpt-3.5-turbo')) {
             return turboTokenizer;
         }
         else if (oai_settings.windowai_model.includes('claude')) {
-            return 'claude';
+            return claudeTokenizer;
         }
         else if (oai_settings.windowai_model.includes('GPT-NeoXT')) {
-            return 'gpt2';
+            return gpt2Tokenizer;
+        }
+    }
+
+    // And for OpenRouter (if not a site model, then it's impossible to determine the tokenizer)
+    if (oai_settings.chat_completion_source == chat_completion_sources.OPENROUTER && oai_settings.openrouter_model) {
+        if (oai_settings.openrouter_model.includes('gpt-4')) {
+            return gpt4Tokenizer;
+        }
+        else if (oai_settings.openrouter_model.includes('gpt-3.5-turbo')) {
+            return turboTokenizer;
+        }
+        else if (oai_settings.openrouter_model.includes('claude')) {
+            return claudeTokenizer;
+        }
+        else if (oai_settings.openrouter_model.includes('GPT-NeoXT')) {
+            return gpt2Tokenizer;
         }
     }
 
     if (oai_settings.chat_completion_source == chat_completion_sources.CLAUDE) {
-        return 'claude';
+        return claudeTokenizer;
     }
 
     // Default to Turbo 3.5

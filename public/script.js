@@ -165,7 +165,7 @@ import {
 import { EventEmitter } from './scripts/eventemitter.js';
 import { context_settings, loadContextTemplatesFromSettings } from "./scripts/context-template.js";
 import { markdownExclusionExt } from "./scripts/showdown-exclusion.js";
-import { NOTE_MODULE_NAME, metadata_keys, setFloatingPrompt, shouldWIAddPrompt } from "./scripts/extensions/floating-prompt/index.js";
+import { NOTE_MODULE_NAME, metadata_keys, setFloatingPrompt, shouldWIAddPrompt } from "./scripts/authors-note.js";
 import { deviceInfo } from "./scripts/RossAscends-mods.js";
 import { getRegexedString, regex_placement } from "./scripts/extensions/regex/engine.js";
 
@@ -363,7 +363,7 @@ const system_messages = {
         is_user: false,
         is_system: true,
         is_name: true,
-        mes: [
+        mes:
             `Hello there! Please select the help topic you would like to learn more about:
             <ul>
             <li><a href="javascript:displayHelp('1')">Slash Commands</a> (or <tt>/help slash</tt>)</li>
@@ -372,7 +372,6 @@ const system_messages = {
             <li><a href="javascript:displayHelp('4')">{{Macros}}</a> (or <tt>/help macros</tt>)</li>
             </ul>
             <br><b>Still got questions left? The <a target="_blank" href="https://docs.sillytavern.app/">Official SillyTavern Documentation Website</a> has much more information!</b>`
-        ]
     },
     slash_commands: {
         name: systemUserName,
@@ -388,7 +387,7 @@ const system_messages = {
         is_user: false,
         is_system: true,
         is_name: true,
-        mes: [
+        mes:
             `Hotkeys/Keybinds:
             <ul>
             <li><tt>Up</tt> = Edit last message in chat</li>
@@ -402,7 +401,6 @@ const system_messages = {
             <li><tt>Ctrl+Shift+Up</tt> = Scroll to context line</li>
             <li><tt>Ctrl+Shift+Down</tt> = Scroll chat to bottom</li>
             </ul>`
-        ]
     },
     formatting: {
         name: systemUserName,
@@ -410,7 +408,7 @@ const system_messages = {
         is_user: false,
         is_system: true,
         is_name: true,
-        mes: [
+        mes:
             `Text formatting commands:
             <ul>
             <li><tt>{​{text}​}</tt> - sets a one-time behavioral bias for the AI. Resets when you send the next message.</li>
@@ -422,7 +420,6 @@ const system_messages = {
             <li><tt>$$ text $$</tt> - renders a LaTeX formula (if enabled)</li>
             <li><tt>$ text $</tt> - renders an AsciiMath formula (if enabled)</li>
             </ul>`
-        ]
     },
     macros: {
         name: systemUserName,
@@ -430,7 +427,7 @@ const system_messages = {
         is_user: false,
         is_system: true,
         is_name: true,
-        mes: [
+        mes:
             `System-wide Replacement Macros:
             <ul>
             <li><tt>{​{user}​}</tt> - your current Persona username</li>
@@ -441,7 +438,6 @@ const system_messages = {
             <li><tt>{{idle_duration}}</tt> - the time since the last user message was sent</li>
             <li><tt>{{random:(args)}}</tt> - returns a random item from the list. (ex: {{random:1,2,3,4}} will return 1 of the 4 numbers at random. Works with text lists too.</li>
             </ul>`
-        ]
     },
     welcome:
     {
@@ -552,6 +548,10 @@ async function getClientVersion() {
 }
 
 function getTokenCount(str, padding = undefined) {
+    if (typeof str !== 'string') {
+        return 0;
+    }
+
     let tokenizerType = power_user.tokenizer;
 
     if (main_api === 'openai') {
@@ -1105,6 +1105,7 @@ function clearChat() {
         $('.zoomed_avatar[forChar]').remove();
     } else { console.debug('saw no avatars') }
     itemizedPrompts = [];
+    chat_metadata = {};
 }
 
 async function deleteLastMessage() {
@@ -2540,7 +2541,7 @@ async function Generate(type, { automatic_trigger, force_name2, resolve, reject,
                         console.debug(`A prompt bias was found: ${promptBias}`);
                         mesSendString += `${name2}: ${promptBias}`;
                     }
-                } else if (power_user.user_prompt_bias) {
+                } else if (power_user.user_prompt_bias && !isImpersonate) {
                     console.debug(`A prompt bias was found without character's name appended: ${promptBias}`);
                     mesSendString += substituteParams(power_user.user_prompt_bias);
                 }
@@ -2946,6 +2947,10 @@ function getNextMessageId(type) {
 }
 
 export function getBiasStrings(textareaText, type) {
+    if (type == 'impersonate') {
+        return { messageBias: '', promptBias: '', isUserPromptBias: false };
+    }
+
     let promptBias = '';
     let messageBias = extractMessageBias(textareaText);
 
@@ -3218,7 +3223,8 @@ function promptItemize(itemizedPrompts, requestedMesId) {
             //charDescriptionTokens +
             //charPersonalityTokens +
             //allAnchorsTokens +
-            //worldInfoStringTokens +
+            worldInfoStringTokens +
+            afterScenarioAnchorTokens +
             examplesStringTokens;
         // OAI doesn't use padding
         thisPrompt_padding = 0;
@@ -3249,7 +3255,7 @@ function promptItemize(itemizedPrompts, requestedMesId) {
     if (this_main_api == 'openai') {
         //console.log('-- applying % on OAI tokens');
         var oaiStartTokensPercentage = ((oaiStartTokens / (finalPromptTokens)) * 100).toFixed(2);
-        var storyStringTokensPercentage = ((oaiPromptTokens / (finalPromptTokens)) * 100).toFixed(2);
+        var storyStringTokensPercentage = (((examplesStringTokens + afterScenarioAnchorTokens + oaiPromptTokens) / (finalPromptTokens)) * 100).toFixed(2);
         var ActualChatHistoryTokensPercentage = ((ActualChatHistoryTokens / (finalPromptTokens)) * 100).toFixed(2);
         var promptBiasTokensPercentage = ((oaiBiasTokens / (finalPromptTokens)) * 100).toFixed(2);
         var worldInfoStringTokensPercentage = ((worldInfoStringTokens / (finalPromptTokens)) * 100).toFixed(2);
@@ -8322,7 +8328,7 @@ $(document).ready(function () {
         var icon = $(this).find('.inline-drawer-icon');
         icon.toggleClass('down up');
         icon.toggleClass('fa-circle-chevron-down fa-circle-chevron-up');
-        $(this).closest('.inline-drawer').find('.inline-drawer-content').slideToggle();
+        $(this).closest('.inline-drawer').find('.inline-drawer-content').stop().slideToggle();
     });
 
     $(document).on('click', '.mes .avatar', function () {
