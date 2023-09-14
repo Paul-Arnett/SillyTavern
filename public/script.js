@@ -310,6 +310,9 @@ reloadMarkdownProcessor();
 console.debug('initializing Prompt Itemization Array on Startup');
 let itemizedPrompts = [];
 
+// PMOD: List for Undo functionality
+let currentChatHistory = [];
+
 /* let bg_menu_toggle = false; */
 export const systemUserName = "SillyTavern System";
 let default_user_name = "User";
@@ -2263,6 +2266,9 @@ async function Generate(type, { automatic_trigger, force_name2, resolve, reject,
     tokens_already_generated = 0;
     generation_started = new Date();
 
+    // PMOD: Push current chat state to history
+    pushChatHistory();
+
     // Don't recreate abort controller if signal is passed
     if (!(abortController && signal)) {
         abortController = new AbortController();
@@ -3028,6 +3034,12 @@ async function Generate(type, { automatic_trigger, force_name2, resolve, reject,
 
             itemizedPrompts.push(thisPromptBits);
             console.debug(`pushed prompt bits to itemizedPrompts array. Length is now: ${itemizedPrompts.length}`);
+
+            // PMOD: Apply repition penality only to messages, not the story string.
+            if (generate_data.hasOwnProperty('repetition_penalty_range')) {
+                generate_data.repetition_penalty_range = getTokenCount(mesSendString, power_user.token_padding);
+                //console.log(generate_data);
+            }
 
             if (main_api == 'openai') {
                 if (isStreamingEnabled() && type !== 'quiet') {
@@ -6355,6 +6367,39 @@ window["SillyTavern"].getContext = function () {
         registedDebugFunction: registerDebugFunction,
     };
 };
+
+//eventSource.on(event_types.CHAT_CHANGED, clearChatHistory);
+//eventSource.on(event_types.MESSAGE_SENT, pushChatHistory);
+$(document).on('click', '#option_undo_chat', undoChatAction);
+// PMOD: Undo Chat Function
+export async function undoChatAction() {
+    console.log('CURRENT CHAT HISTORY:\n', currentChatHistory);
+    if (currentChatHistory.length > 0) {
+        chat = currentChatHistory.pop();
+        if (chat[chat.length - 1]['swipe_id'] > chat[chat.length - 1]['swipe_info'].length - 1) {
+            chat[chat.length - 1]['swipe_id'] = chat[chat.length - 1]['swipe_info'].length - 1;
+        }
+        console.log('CURRENT CHAT STATE:\n', chat);
+        await saveChatConditional();
+        reloadCurrentChat()
+    }
+    else {
+        toastr.error('No chat history to undo.');
+    }
+}
+
+function pushChatHistory() {
+    //previousChatState.push(JSON.parse(JSON.stringify(chat)));
+    currentChatHistory.push(structuredClone(chat));
+    console.log("Previous chat state saved. Length: " + currentChatHistory.length);
+    toastr.info('Adding to history...', '', { timeOut: 500 });
+}
+
+function clearChatHistory() {
+    currentChatHistory = [];
+    console.log("Chat history cleared.");
+    toastr.info('Chat changed. Clearing history...');
+}
 
 function swipe_left() {      // when we swipe left..but no generation.
     if (chat.length - 1 === Number(this_edit_mes_id)) {

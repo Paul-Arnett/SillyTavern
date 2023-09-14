@@ -910,6 +910,9 @@ export function initRossMods() {
      * @param {KeyboardEvent} event
      */
     function processHotkeys(event) {
+        // PMOD: Call extra hotkeys
+        processExtraHotkeys(event);
+
         //Enter to send when send_textarea in focus
         if ($(':focus').attr('id') === 'send_textarea') {
             const sendOnEnter = shouldSendOnEnter();
@@ -964,6 +967,7 @@ export function initRossMods() {
                 console.debug("Ctrl+Enter ignored");
             }
         }
+
 
         // Helper function to check if nanogallery2's lightbox is active
         function isNanogallery2LightboxActive() {
@@ -1109,6 +1113,38 @@ export function initRossMods() {
             // This will eventually be to trigger quick replies
             event.preventDefault();
             console.log("Ctrl +" + event.key + " pressed!");
+        }
+    }
+
+    function processExtraHotkeys(event) {
+        // PMOD: Undo hotkey
+        if (event.ctrlKey && event.key == "z") {
+            if (is_send_press == false) {
+                console.log("Hotkey: Undo Generation");
+                event.preventDefault();
+                $('#option_undo_chat').trigger('click');
+            }
+        }
+
+        // PMOD: Toggle Edit hotkey
+        if (event.ctrlKey && event.key == "x") {
+            if (is_send_press == false) {
+                console.log("Hotkey: Toggle Edit Last Message");
+                event.preventDefault();
+                if ($('.mes_edit_done').is(':visible')) {
+                    $('.last_mes .mes_edit_done').trigger('click');
+                }
+                else {
+                    $('.last_mes .mes_edit').trigger('click');
+                }
+            }
+            // Stop Generation if it's running
+            else {
+                console.log("Hotkey: Stop Generation");
+                if ($('#mes_stop').is(':visible')) {
+                    $('#mes_stop').trigger('click');
+                }
+            }
         }
     }
 }
