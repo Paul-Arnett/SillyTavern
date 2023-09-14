@@ -19,6 +19,7 @@ public/scripts/extensions/third-party/
 public/stats.json
 /uploads/
 *.jsonl
+*.ps1
 /config.conf
 /docker/config
 .DS_Store
