@@ -134,7 +134,10 @@ const extension_settings = {
     caption: {
         refine_mode: false,
     },
-    expressions: {},
+    expressions: {
+        /** @type {string[]} */
+        custom: [],
+    },
     dice: {},
     regex: [],
     tts: {},
@@ -153,6 +156,8 @@ const extension_settings = {
     },
     speech_recognition: {},
     rvc: {},
+    hypebot: {},
+    vectors: {},
 };
 
 let modules = [];
