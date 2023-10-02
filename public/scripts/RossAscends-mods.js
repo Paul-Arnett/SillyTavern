@@ -1145,7 +1145,7 @@ export function initRossMods() {
 
     function processExtraHotkeys(event) {
         // PMOD: Undo hotkey
-        if (event.ctrlKey && event.key == "z") {
+        if (event.altKey && event.key == "z") {
             if (is_send_press == false) {
                 console.log("Hotkey: Undo Generation");
                 event.preventDefault();
@@ -1154,7 +1154,7 @@ export function initRossMods() {
         }
 
         // PMOD: Toggle Edit hotkey
-        if (event.ctrlKey && event.key == "x") {
+        if (event.altKey && event.key == "x") {
             if (is_send_press == false) {
                 console.log("Hotkey: Toggle Edit Last Message");
                 event.preventDefault();
