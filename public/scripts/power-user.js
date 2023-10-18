@@ -165,6 +165,7 @@ let power_user = {
     continue_on_send: false,
     trim_spaces: true,
     relaxed_api_urls: false,
+    world_import_dialog: true,
     disable_group_trimming: false,
 
     default_instruct: '',
@@ -896,6 +897,7 @@ function loadPowerUserSettings(settings, data) {
     }
 
     $('#relaxed_api_urls').prop("checked", power_user.relaxed_api_urls);
+    $('#world_import_dialog').prop("checked", power_user.world_import_dialog);
     $('#trim_spaces').prop("checked", power_user.trim_spaces);
     $('#continue_on_send').prop("checked", power_user.continue_on_send);
     $('#quick_continue').prop("checked", power_user.quick_continue);
@@ -1410,12 +1412,15 @@ async function resetMovablePanels(type) {
         'WorldInfo',
         'floatingPrompt',
         'expression-holder',
-        'groupMemberListPopout'
+        'groupMemberListPopout',
+        'summaryExtensionPopout',
+        'gallery'
     ];
 
     const panelStyles = ['top', 'left', 'right', 'bottom', 'height', 'width', 'margin',];
 
     panelIds.forEach((id) => {
+        console.log(id)
         const panel = document.getElementById(id);
 
         if (panel) {
@@ -2303,6 +2308,12 @@ $(document).ready(() => {
     $("#relaxed_api_urls").on("input", function () {
         const value = !!$(this).prop('checked');
         power_user.relaxed_api_urls = value;
+        saveSettingsDebounced();
+    });
+
+    $("#world_import_dialog").on("input", function () {
+        const value = !!$(this).prop('checked');
+        power_user.world_import_dialog = value;
         saveSettingsDebounced();
     });
 

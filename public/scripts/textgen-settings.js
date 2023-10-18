@@ -227,6 +227,10 @@ export function isAphrodite() {
     return textgenerationwebui_settings.type === textgen_types.APHRODITE;
 }
 
+export function isOoba() {
+    return textgenerationwebui_settings.type === textgen_types.OOBA;
+}
+
 export function getTextGenUrlSourceId() {
     switch (textgenerationwebui_settings.type) {
         case textgen_types.MANCER:
@@ -327,6 +331,18 @@ async function generateTextGenWithStreaming(generate_data, signal) {
         streamingUrl = api_server_textgenerationwebui;
     }
 
+    if (isMancer() || isOoba()) {
+        try {
+            const parsedUrl = new URL(streamingUrl);
+            if (parsedUrl.protocol !== 'ws:' && parsedUrl.protocol !== 'wss:') {
+                throw new Error('Invalid protocol');
+            }
+        } catch {
+            toastr.error('Invalid URL for streaming. Make sure it starts with ws:// or wss://');
+            return async function* () { throw new Error('Invalid URL for streaming.'); }
+        }
+    }
+
     const response = await fetch('/generate_textgenerationwebui', {
         headers: {
             ...getRequestHeaders(),
@@ -421,5 +437,7 @@ export function getTextGenGenerationData(finalPrompt, this_amount_gen, isImperso
         'mirostat_eta': textgenerationwebui_settings.mirostat_eta,
         'grammar_string': textgenerationwebui_settings.grammar_string,
         'custom_token_bans': getCustomTokenBans(),
+        'use_mancer': isMancer(),
+        'use_aphrodite': isAphrodite(),
     };
 }

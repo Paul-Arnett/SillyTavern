@@ -9,6 +9,7 @@ import {
     saveBase64AsFile,
     PAGINATION_TEMPLATE,
     waitUntilCondition,
+    getBase64Async,
 } from './utils.js';
 import { RA_CountCharTokens, humanizedDateTime, dragElement, favsToHotswap, getMessageTimeStamp } from "./RossAscends-mods.js";
 import { loadMovingUIState, sortEntitiesList } from './power-user.js';
@@ -992,27 +993,29 @@ function printGroupCandidates() {
 
 function printGroupMembers() {
     const storageKey = 'GroupMembers_PerPage';
-    $("#rm_group_members_pagination").pagination({
-        dataSource: getGroupCharacters({ doFilter: false, onlyMembers: true }),
-        pageRange: 1,
-        position: 'top',
-        showPageNumbers: false,
-        prevText: '<',
-        nextText: '>',
-        formatNavigator: PAGINATION_TEMPLATE,
-        showNavigator: true,
-        showSizeChanger: true,
-        pageSize: Number(localStorage.getItem(storageKey)) || 5,
-        sizeChangerOptions: [5, 10, 25, 50, 100, 200],
-        afterSizeSelectorChange: function (e) {
-            localStorage.setItem(storageKey, e.target.value);
-        },
-        callback: function (data) {
-            $("#rm_group_members").empty();
-            for (const i of data) {
-                $("#rm_group_members").append(getGroupCharacterBlock(i.item));
-            }
-        },
+    $(".rm_group_members_pagination").each(function() {
+        $(this).pagination({
+            dataSource: getGroupCharacters({ doFilter: false, onlyMembers: true }),
+            pageRange: 1,
+            position: 'top',
+            showPageNumbers: false,
+            prevText: '<',
+            nextText: '>',
+            formatNavigator: PAGINATION_TEMPLATE,
+            showNavigator: true,
+            showSizeChanger: true,
+            pageSize: Number(localStorage.getItem(storageKey)) || 5,
+            sizeChangerOptions: [5, 10, 25, 50, 100, 200],
+            afterSizeSelectorChange: function (e) {
+                localStorage.setItem(storageKey, e.target.value);
+            },
+            callback: function (data) {
+                $(".rm_group_members").empty();
+                for (const i of data) {
+                    $(".rm_group_members").append(getGroupCharacterBlock(i.item));
+                }
+            },
+        });
     });
 }
 
@@ -1107,6 +1110,7 @@ function select_group_chats(groupId, skipAnimation) {
         $("#rm_group_submit").hide();
         $("#rm_group_delete").show();
         $("#rm_group_scenario").show();
+        $('#group-metadata-controls .chat_lorebook_button').removeClass('disabled').prop('disabled', false);
     } else {
         $("#rm_group_submit").show();
         if ($("#groupAddMemberListToggle .inline-drawer-content").css('display') !== 'block') {
@@ -1114,6 +1118,7 @@ function select_group_chats(groupId, skipAnimation) {
         }
         $("#rm_group_delete").hide();
         $("#rm_group_scenario").hide();
+        $('#group-metadata-controls .chat_lorebook_button').addClass('disabled').prop('disabled', true);
     }
 
     updateFavButtonState(group?.fav ?? false);
@@ -1146,35 +1151,28 @@ async function uploadGroupAvatar(event) {
         return;
     }
 
-    const e = await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = resolve;
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-    });
+    const result = await getBase64Async(file);
 
     $('#dialogue_popup').addClass('large_dialogue_popup wide_dialogue_popup');
 
-    const croppedImage = await callPopup(getCropPopup(e.target.result), 'avatarToCrop');
+    const croppedImage = await callPopup(getCropPopup(result), 'avatarToCrop');
 
     if (!croppedImage) {
         return;
     }
 
-    let thumbnail = await createThumbnail(croppedImage, 96, 144);
+    let thumbnail = await createThumbnail(croppedImage, 200, 300);
     //remove data:image/whatever;base64
     thumbnail = thumbnail.replace(/^data:image\/[a-z]+;base64,/, "");
     let _thisGroup = groups.find((x) => x.id == openGroupId);
     // filename should be group id + human readable timestamp
-    const filename = `${_thisGroup.id}_${humanizedDateTime()}`;
-    let thumbnailUrl = await saveBase64AsFile(thumbnail, openGroupId.toString(), filename, 'jpg');
+    const filename = _thisGroup ? `${_thisGroup.id}_${humanizedDateTime()}` : humanizedDateTime();
+    let thumbnailUrl = await saveBase64AsFile(thumbnail, String(openGroupId ?? ''), filename, 'jpg');
     if (!openGroupId) {
         $('#group_avatar_preview img').attr('src', thumbnailUrl);
         $('#rm_group_restore_avatar').show();
         return;
     }
-
-
 
     _thisGroup.avatar_url = thumbnailUrl;
     $("#group_avatar_preview").empty().append(getGroupAvatar(_thisGroup));
@@ -1561,11 +1559,17 @@ function doCurMemberListPopout() {
         <div id="groupMemberListPopoutClose" class="fa-solid fa-circle-xmark hoverglow"></div>
     </div>`
         const newElement = $(template);
-        newElement.attr('id', 'groupMemberListPopout');
-        newElement.removeClass('zoomed_avatar')
-        newElement.empty()
 
-        newElement.append(controlBarHtml).append(memberListClone)
+        newElement.attr('id', 'groupMemberListPopout')
+            .removeClass('zoomed_avatar')
+            .addClass('draggable')
+            .empty()
+            .append(controlBarHtml)
+            .append(memberListClone)
+
+        // Remove pagination from popout
+        newElement.find('.group_pagination').empty();
+
         $('body').append(newElement);
         loadMovingUIState();
         $("#groupMemberListPopout").fadeIn(250)
@@ -1574,6 +1578,8 @@ function doCurMemberListPopout() {
             $("#groupMemberListPopout").fadeOut(250, () => { $("#groupMemberListPopout").remove() })
         })
 
+        // Re-add pagination not working in popout
+        printGroupMembers();
     } else {
         console.debug('saw existing popout, removing')
         $("#groupMemberListPopout").fadeOut(250, () => { $("#groupMemberListPopout").remove() });
