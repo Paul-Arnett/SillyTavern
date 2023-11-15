@@ -2743,7 +2743,7 @@ app.post("/getstatus_openai", jsonParser, async function (request, response_gets
 
                 data.data.forEach(model => {
                     const context_length = model.context_length;
-                    const tokens_dollar = Number(1 / (1000 * model.pricing.prompt));
+                    const tokens_dollar = Number(1 / (1000 * model.pricing?.prompt));
                     const tokens_rounded = (Math.round(tokens_dollar * 1000) / 1000).toFixed(0);
                     models[model.id] = {
                         tokens_per_dollar: tokens_rounded + 'k',
@@ -2764,8 +2764,8 @@ app.post("/getstatus_openai", jsonParser, async function (request, response_gets
             }
         }
         else {
-            console.log('Access Token is incorrect.');
-            response_getstatus_openai.send({ error: true });
+            console.log('OpenAI status check failed. Either Access Token is incorrect or API endpoint is down.');
+            response_getstatus_openai.send({ error: true, can_bypass: true, data: { data: [] } });
         }
     } catch (e) {
         console.error(e);
@@ -3528,6 +3528,9 @@ require('./src/classify').registerEndpoints(app, jsonParser);
 // Image captioning
 require('./src/caption').registerEndpoints(app, jsonParser);
 
+// Web search extension
+require('./src/serpapi').registerEndpoints(app, jsonParser);
+
 const tavernUrl = new URL(
     (cliArguments.ssl ? 'https://' : 'http://') +
     (listen ? '0.0.0.0' : '127.0.0.1') +
@@ -3637,7 +3640,7 @@ function backupChat(name, chat) {
         // replace non-alphanumeric characters with underscores
         name = sanitize(name).replace(/[^a-z0-9]/gi, '_').toLowerCase();
 
-        const backupFile = path.join(DIRECTORIES.backups, `chat_${name}_${generateTimestamp()}.json`);
+        const backupFile = path.join(DIRECTORIES.backups, `chat_${name}_${generateTimestamp()}.jsonl`);
         writeFileAtomicSync(backupFile, chat, 'utf-8');
 
         removeOldBackups(`chat_${name}_`);

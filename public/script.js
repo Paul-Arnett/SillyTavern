@@ -143,6 +143,7 @@ import {
     escapeRegex,
     resetScrollHeight,
     onlyUnique,
+    getBase64Async,
 } from "./scripts/utils.js";
 
 import { ModuleWorkerWrapper, doDailyExtensionUpdatesCheck, extension_settings, getContext, loadExtensionSettings, processExtensionHelpers, registerExtensionHelper, renderExtensionTemplate, runGenerationInterceptors, saveMetadataDebounced } from "./scripts/extensions.js";
@@ -184,7 +185,7 @@ import {
 } from "./scripts/instruct-mode.js";
 import { applyLocale } from "./scripts/i18n.js";
 import { getFriendlyTokenizerName, getTokenCount, getTokenizerModel, initTokenizers, saveTokenCache } from "./scripts/tokenizers.js";
-import { initPersonas, selectCurrentPersona, setPersonaDescription } from "./scripts/personas.js";
+import { createPersona, initPersonas, selectCurrentPersona, setPersonaDescription } from "./scripts/personas.js";
 import { getBackgrounds, initBackgrounds } from "./scripts/backgrounds.js";
 import { hideLoader, showLoader } from "./scripts/loader.js";
 import { CharacterContextMenu, BulkEditOverlay } from "./scripts/BulkEditOverlay.js";
@@ -313,11 +314,6 @@ export const event_types = {
 
 export const eventSource = new EventEmitter();
 
-// Check for override warnings every 5 seconds...
-setInterval(displayOverrideWarnings, 5000);
-// ...or when the chat changes
-eventSource.on(event_types.SETTINGS_LOADED, () => { settingsReady = true; });
-eventSource.on(event_types.CHAT_CHANGED, displayOverrideWarnings);
 eventSource.on(event_types.MESSAGE_RECEIVED, processExtensionHelpers);
 eventSource.on(event_types.MESSAGE_SENT, processExtensionHelpers);
 
@@ -662,7 +658,7 @@ let api_server_textgenerationwebui = "";
 
 let is_send_press = false; //Send generation
 
-let this_del_mes = 0;
+let this_del_mes = -1;
 
 //message editing and chat scroll position persistence
 var this_edit_mes_text = "";
@@ -733,7 +729,7 @@ async function firstLoadInit() {
     sendSystemMessage(system_message_types.WELCOME);
     await readSecretState();
     await getClientVersion();
-    await getSettings("def");
+    await getSettings();
     await getUserAvatars();
     await getCharacters();
     await getBackgrounds();
@@ -930,12 +926,12 @@ async function getStatus() {
 
 export function startStatusLoading() {
     $(".api_loading").show();
-    $(".api_button").attr("disabled", "disabled").addClass("disabled");
+    $(".api_button").addClass("disabled");
 }
 
 export function stopStatusLoading() {
     $(".api_loading").hide();
-    $(".api_button").removeAttr("disabled").removeClass("disabled");
+    $(".api_button").removeClass("disabled");
 }
 
 export function resultCheckStatus() {
@@ -993,20 +989,32 @@ export async function selectCharacterById(id) {
     }
 }
 
-function getTagBlock(item) {
-    const count = Object.values(tag_map).flat().filter(x => x == item.id).length;
+function getTagBlock(item, entities) {
+    let count = 0;
+
+    for (const entity of entities) {
+        if (entitiesFilter.isElementTagged(entity, item.id)) {
+            count++;
+        }
+    }
+
     const template = $('#bogus_folder_template .bogus_folder_select').clone();
     template.attr({ 'tagid': item.id, 'id': `BogusFolder${item.id}` });
-    template.find('.avatar').css({'background-color': item.color, 'color': item.color2 });
+    template.find('.avatar').css({ 'background-color': item.color, 'color': item.color2 });
     template.find('.ch_name').text(item.name);
     template.find('.bogus_folder_counter').text(count);
+    return template;
+}
+
+function getBackBlock() {
+    const template = $('#bogus_folder_back_template .bogus_folder_select').clone();
     return template;
 }
 
 function getEmptyBlock() {
     const icons = ['fa-dragon', 'fa-otter', 'fa-kiwi-bird', 'fa-crow', 'fa-frog'];
     const texts = ['Here be dragons', 'Otterly empty', 'Kiwibunga', 'Pump-a-Rum', 'Croak it'];
-    const roll = Math.floor(Math.random() * icons.length);
+    const roll = new Date().getMinutes() % icons.length;
     const emptyBlock = `
     <div class="empty_block">
         <i class="fa-solid ${icons[roll]} fa-4x"></i>
@@ -1042,9 +1050,10 @@ function getCharacterBlock(item, id) {
         template.find('.ch_description').hide();
     }
 
-    const version = item.data?.character_version || '';
-    if (version) {
-        template.find('.character_version').text(version);
+    const auxFieldName = power_user.aux_field || 'character_version';
+    const auxFieldValue = (item.data && item.data[auxFieldName]) || '';
+    if (auxFieldValue) {
+        template.find('.character_version').text(auxFieldValue);
     }
     else {
         template.find('.character_version').hide();
@@ -1064,20 +1073,21 @@ async function printCharacters(fullRefresh = false) {
         saveCharactersPage = 0;
         printTagFilters(tag_filter_types.character);
         printTagFilters(tag_filter_types.group_member);
-        const isBogusFolderOpen = !!entitiesFilter.getFilterData(FILTER_TYPES.TAG)?.bogus;
 
         // Return to main list
-        if (isBogusFolderOpen) {
+        if (isBogusFolderOpen()) {
             entitiesFilter.setFilterData(FILTER_TYPES.TAG, { excluded: [], selected: [] });
         }
 
         await delay(1);
-        displayOverrideWarnings();
     }
 
     const storageKey = 'Characters_PerPage';
+    const listId = '#rm_print_characters_block';
+    const entities = getEntitiesList({ doFilter: true });
+
     $("#rm_print_characters_pagination").pagination({
-        dataSource: getEntitiesList({ doFilter: true }),
+        dataSource: entities,
         pageSize: Number(localStorage.getItem(storageKey)) || per_page_default,
         sizeChangerOptions: [10, 25, 50, 100, 250, 500, 1000],
         pageRange: 1,
@@ -1090,20 +1100,25 @@ async function printCharacters(fullRefresh = false) {
         formatNavigator: PAGINATION_TEMPLATE,
         showNavigator: true,
         callback: function (data) {
-            $("#rm_print_characters_block").empty();
-            for (const i of data) {
-                if (i.type === 'character') {
-                    $("#rm_print_characters_block").append(getCharacterBlock(i.item, i.id));
-                }
-                if (i.type === 'group') {
-                    $("#rm_print_characters_block").append(getGroupBlock(i.item));
-                }
-                if (i.type === 'tag') {
-                    $("#rm_print_characters_block").append(getTagBlock(i.item));
-                }
+            $(listId).empty();
+            if (isBogusFolderOpen()) {
+                $(listId).append(getBackBlock());
             }
             if (!data.length) {
-                $("#rm_print_characters_block").append(getEmptyBlock());
+                $(listId).append(getEmptyBlock());
+            }
+            for (const i of data) {
+                switch (i.type) {
+                    case 'character':
+                        $(listId).append(getCharacterBlock(i.item, i.id));
+                        break;
+                    case 'group':
+                        $(listId).append(getGroupBlock(i.item));
+                        break;
+                    case 'tag':
+                        $(listId).append(getTagBlock(i.item, entities));
+                        break;
+                }
             }
             eventSource.emit(event_types.CHARACTER_PAGE_LOADED);
         },
@@ -1114,24 +1129,58 @@ async function printCharacters(fullRefresh = false) {
             saveCharactersPage = e;
         },
         afterRender: function () {
-            $('#rm_print_characters_block').scrollTop(0);
+            $(listId).scrollTop(0);
         },
     });
 
     favsToHotswap();
 }
 
-export function getEntitiesList({ doFilter } = {}) {
-    let entities = [];
-    entities.push(...characters.map((item, index) => ({ item, id: index, type: 'character' })));
-    entities.push(...groups.map((item) => ({ item, id: item.id, type: 'group' })));
+/**
+ * Indicates whether a user is currently in a bogus folder.
+ * @returns {boolean} If currently viewing a folder
+ */
+function isBogusFolderOpen() {
+    return !!entitiesFilter.getFilterData(FILTER_TYPES.TAG)?.bogus;
+}
 
-    if (power_user.bogus_folders) {
-        entities.push(...tags.map((item) => ({ item, id: item.id, type: 'tag' })));
+export function getEntitiesList({ doFilter } = {}) {
+    function characterToEntity(character, id) {
+        return { item: character, id, type: 'character' };
     }
+
+    function groupToEntity(group) {
+        return { item: group, id: group.id, type: 'group' };
+    }
+
+    function tagToEntity(tag) {
+        return { item: structuredClone(tag), id: tag.id, type: 'tag' };
+    }
+
+    let entities = [
+        ...characters.map((item, index) => characterToEntity(item, index)),
+        ...groups.map(item => groupToEntity(item)),
+        ...(power_user.bogus_folders ? tags.map(item => tagToEntity(item)) : []),
+    ];
 
     if (doFilter) {
         entities = entitiesFilter.applyFilters(entities);
+    }
+
+    if (isBogusFolderOpen()) {
+        // Get tags of entities within the bogus folder
+        const filterData = structuredClone(entitiesFilter.getFilterData(FILTER_TYPES.TAG));
+        entities = entities.filter(x => x.type !== 'tag');
+        const otherTags = tags.filter(x => !filterData.selected.includes(x.id));
+        const bogusTags = [];
+        for (const entity of entities) {
+            for (const tag of otherTags) {
+                if (!bogusTags.includes(tag) && entitiesFilter.isElementTagged(entity, tag.id)) {
+                    bogusTags.push(tag);
+                }
+            }
+        }
+        entities.push(...bogusTags.map(item => tagToEntity(item)));
     }
 
     sortEntitiesList(entities);
@@ -1862,6 +1911,8 @@ function substituteParams(content, _name1, _name2, _original, _group, _replaceCh
 
     if (_replaceCharacterCard) {
         const fields = getCharacterCardFields();
+        content = content.replace(/{{charPrompt}}/gi, fields.system || '');
+        content = content.replace(/{{charJailbreak}}/gi, fields.jailbreak || '');
         content = content.replace(/{{description}}/gi, fields.description || '');
         content = content.replace(/{{personality}}/gi, fields.personality || '');
         content = content.replace(/{{scenario}}/gi, fields.scenario || '');
@@ -3362,7 +3413,7 @@ async function Generate(type, { automatic_trigger, force_name2, resolve, reject,
                 generate_data = getNovelGenerationData(finalPrompt, presetSettings, maxLength, isImpersonate, cfgValues);
             }
             else if (main_api == 'openai') {
-                let [prompt, counts] = prepareOpenAIMessages({
+                let [prompt, counts] = await prepareOpenAIMessages({
                     name2: name2,
                     charDescription: description,
                     charPersonality: personality,
@@ -4649,7 +4700,7 @@ async function renamePastChats(newAvatar, newValue) {
     }
 }
 
-function saveChatDebounced() {
+export function saveChatDebounced() {
     const chid = this_chid;
     const selectedGroup = selected_group;
 
@@ -4744,21 +4795,20 @@ async function read_avatar_load(input) {
             create_save.avatar = input.files;
         }
 
-        const e = await new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = resolve;
-            reader.onerror = reject;
-            reader.readAsDataURL(input.files[0]);
-        })
+        const file = input.files[0];
+        const fileData = await getBase64Async(file);
 
-        $('#dialogue_popup').addClass('large_dialogue_popup wide_dialogue_popup');
+        if (!power_user.never_resize_avatars) {
+            $('#dialogue_popup').addClass('large_dialogue_popup wide_dialogue_popup');
+            const croppedImage = await callPopup(getCropPopup(fileData), 'avatarToCrop');
+            if (!croppedImage) {
+                return;
+            }
 
-        const croppedImage = await callPopup(getCropPopup(e.target.result), 'avatarToCrop');
-        if (!croppedImage) {
-            return;
+            $("#avatar_load_preview").attr("src", croppedImage);
+        } else {
+            $("#avatar_load_preview").attr("src", fileData);
         }
-
-        $("#avatar_load_preview").attr("src", croppedImage || e.target.result);
 
         if (menu_type == "create") {
             return;
@@ -5048,11 +5098,10 @@ export async function getUserAvatars() {
         $("#user_avatar_block").append('<div class="avatar_upload">+</div>');
 
         for (var i = 0; i < getData.length; i++) {
-            //console.log(1);
             appendUserAvatar(getData[i]);
         }
-        //var aa = JSON.parse(getData[0]);
-        //const load_ch_coint = Object.getOwnPropertyNames(getData);
+
+        return getData;
     }
 }
 
@@ -5121,24 +5170,19 @@ async function uploadUserAvatar(e) {
     }
 
     const formData = new FormData($("#form_upload_avatar").get(0));
-
-    const dataUrl = await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = resolve;
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-    });
-
-    $('#dialogue_popup').addClass('large_dialogue_popup wide_dialogue_popup');
-    const confirmation = await callPopup(getCropPopup(dataUrl.target.result), 'avatarToCrop');
-    if (!confirmation) {
-        return;
-    }
-
+    const dataUrl = await getBase64Async(file);
     let url = "/uploaduseravatar";
 
-    if (crop_data !== undefined) {
-        url += `?crop=${encodeURIComponent(JSON.stringify(crop_data))}`;
+    if (!power_user.never_resize_avatars) {
+        $('#dialogue_popup').addClass('large_dialogue_popup wide_dialogue_popup');
+        const confirmation = await callPopup(getCropPopup(dataUrl), 'avatarToCrop');
+        if (!confirmation) {
+            return;
+        }
+
+        if (crop_data !== undefined) {
+            url += `?crop=${encodeURIComponent(JSON.stringify(crop_data))}`;
+        }
     }
 
     jQuery.ajax({
@@ -5149,12 +5193,18 @@ async function uploadUserAvatar(e) {
         cache: false,
         contentType: false,
         processData: false,
-        success: async function () {
+        success: async function (data) {
             // If the user uploaded a new avatar, we want to make sure it's not cached
             const name = formData.get("overwrite_name");
             if (name) {
                 await fetch(getUserAvatar(name), { cache: "no-cache" });
                 reloadUserAvatar(true);
+            }
+
+            if (!name && data.path) {
+                await getUserAvatars();
+                await delay(500);
+                await createPersona(data.path);
             }
 
             crop_data = undefined;
@@ -5194,7 +5244,7 @@ async function doOnboarding(avatarId) {
 
 //***************SETTINGS****************//
 ///////////////////////////////////////////
-async function getSettings(type) {
+async function getSettings() {
     const response = await fetch("/getsettings", {
         method: "POST",
         headers: getRequestHeaders(),
@@ -5367,6 +5417,7 @@ async function getSettings(type) {
         }
     }
 
+    settingsReady = true;
     eventSource.emit(event_types.SETTINGS_LOADED);
 }
 
@@ -5509,6 +5560,7 @@ function openMessageDelete(fromSlashCommand) {
             selected_group: ${selected_group}
             is_group_generating: ${is_group_generating}`);
     }
+    this_del_mes = -1;
     is_delete_mode = true;
 }
 
@@ -6758,6 +6810,8 @@ window["SillyTavern"].getContext = function () {
         extensionSettings: extension_settings,
         ModuleWorkerWrapper: ModuleWorkerWrapper,
         getTokenizerModel: getTokenizerModel,
+        tags: tags,
+        tagMap: tag_map,
     };
 };
 
@@ -7122,19 +7176,6 @@ const swipe_right = () => {
             }
         });
     }
-}
-
-
-
-function displayOverrideWarnings() {
-    if (!this_chid || !selected_group) {
-        $('.prompt_overridden').hide();
-        $('.jailbreak_overridden').hide();
-        return;
-    }
-
-    $('.prompt_overridden').toggle(!!(characters[this_chid]?.data?.system_prompt));
-    $('.jailbreak_overridden').toggle(!!(characters[this_chid]?.data?.post_history_instructions));
 }
 
 function connectAPISlash(_, text) {
@@ -7569,8 +7610,25 @@ jQuery(async function () {
     $(document).on("click", ".bogus_folder_select", function () {
         const tagId = $(this).attr('tagid');
         console.log('Bogus folder clicked', tagId);
-        entitiesFilter.setFilterData(FILTER_TYPES.TAG, { excluded: [], selected: [tagId], bogus: true, });
-    })
+
+        const filterData = structuredClone(entitiesFilter.getFilterData(FILTER_TYPES.TAG));
+
+        if (!Array.isArray(filterData.selected)) {
+            filterData.selected = [];
+            filterData.excluded = [];
+            filterData.bogus = false;
+        }
+
+        if (tagId === 'back') {
+            filterData.selected.pop();
+            filterData.bogus = filterData.selected.length > 0;
+        } else {
+            filterData.selected.push(tagId);
+            filterData.bogus = true;
+        }
+
+        entitiesFilter.setFilterData(FILTER_TYPES.TAG, filterData);
+    });
 
     $(document).on("input", ".edit_textarea", function () {
         scroll_holder = $("#chat").scrollTop();
@@ -8015,14 +8073,14 @@ jQuery(async function () {
         return menu.is(':hover') || button.is(':hover');
     }
 
-    button.on('mouseenter click', function () { showMenu(); });
-    button.on('mouseleave', function () {
+    button.on('click', function () { showMenu(); });
+    button.on('blur', function () {
         //delay to prevent menu hiding when mouse leaves button into menu
         setTimeout(() => {
             if (!isMouseOverButtonOrMenu()) { hideMenu(); }
         }, 100)
     });
-    menu.on('mouseleave', function () {
+    menu.on('blur', function () {
         //delay to prevent menu hide when mouseleaves menu into button
         setTimeout(() => {
             if (!isMouseOverButtonOrMenu()) { hideMenu(); }
@@ -8157,9 +8215,8 @@ jQuery(async function () {
             $(this).parent().css("background", css_mes_bg);
             $(this).prop("checked", false);
         });
-        this_del_mes = 0;
-        console.debug('canceled del msgs, calling showswipesbtns');
         showSwipeButtons();
+        this_del_mes = -1;
         is_delete_mode = false;
     });
 
@@ -8173,21 +8230,26 @@ jQuery(async function () {
             $(this).parent().css("background", css_mes_bg);
             $(this).prop("checked", false);
         });
-        $(".mes[mesid='" + this_del_mes + "']")
-            .nextAll("div")
-            .remove();
-        $(".mes[mesid='" + this_del_mes + "']").remove();
-        chat.length = this_del_mes;
-        count_view_mes = this_del_mes;
-        await saveChatConditional();
-        var $textchat = $("#chat");
-        $textchat.scrollTop($textchat[0].scrollHeight);
-        eventSource.emit(event_types.MESSAGE_DELETED, chat.length);
-        this_del_mes = 0;
-        $('#chat .mes').last().addClass('last_mes');
-        $('#chat .mes').eq(-2).removeClass('last_mes');
-        console.debug('confirmed del msgs, calling showswipesbtns');
+
+        if (this_del_mes >= 0) {
+            $(".mes[mesid='" + this_del_mes + "']")
+                .nextAll("div")
+                .remove();
+            $(".mes[mesid='" + this_del_mes + "']").remove();
+            chat.length = this_del_mes;
+            count_view_mes = this_del_mes;
+            await saveChatConditional();
+            var $textchat = $("#chat");
+            $textchat.scrollTop($textchat[0].scrollHeight);
+            eventSource.emit(event_types.MESSAGE_DELETED, chat.length);
+            $('#chat .mes').last().addClass('last_mes');
+            $('#chat .mes').eq(-2).removeClass('last_mes');
+        } else {
+            console.log('this_del_mes is not >= 0, not deleting');
+        }
+
         showSwipeButtons();
+        this_del_mes = -1;
         is_delete_mode = false;
     });
 
@@ -8670,7 +8732,7 @@ jQuery(async function () {
 
         startStatusLoading();
         // Check near immediately rather than waiting for up to 90s
-        setTimeout(getStatusNovel, 10);
+        await getStatusNovel();
     });
 
     //**************************CHARACTER IMPORT EXPORT*************************//
@@ -9080,8 +9142,11 @@ jQuery(async function () {
         }
     });
 
+    let manualInputTimeout;
+
     $(document).on('input', '.range-block-counter input, .neo-range-input', function () {
-        setTimeout(() => {
+        clearTimeout(manualInputTimeout);
+        manualInputTimeout = setTimeout(() => {
             const caretPosition = saveCaretPosition($(this).get(0));
             const myText = $(this).val().trim();
             $(this).val(myText); // trim line breaks and spaces
@@ -9103,7 +9168,7 @@ jQuery(async function () {
 
             //yolo anything for Lab Mode
             if (power_user.enableLabMode) {
-                console.log($(masterElement).attr('id'), myValue)
+                //console.log($(masterElement).attr('id'), myValue)
                 $(masterElement).val(myValue).trigger('input')
                 return
             }
@@ -9147,7 +9212,7 @@ jQuery(async function () {
 
             restoreCaretPosition($(this).get(0), caretPosition);
         }, 2000);
-    })
+    });
 
     $(".user_stats_button").on('click', function () {
         userStatsHandler();
