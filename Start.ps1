@@ -1,12 +1,13 @@
 git pull origin
-npm install --no-audit
+npm install
+
 
 function Start-TavernExtras {
     Write-Host "Starting Tavern Extras..." -ForegroundColor Blue
     Push-Location "C:\Applications\AI\Text\Chat\SillyTavern-extras"
     git pull origin
     & .\venv\Scripts\Activate.ps1
-    Start-Process python "server.py --enable-modules=caption,summarize,classify,sd,chromadb,rvc --cuda"
+    Start-Process python "server.py --enable-modules=caption,summarize,classify,sd,chromadb --cuda"
     Pop-Location
 }
 
