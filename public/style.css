@@ -3,6 +3,7 @@
 @import url(css/promptmanager.css);
 @import url(css/loader.css);
 @import url(css/character-group-overlay.css);
+@import url(css/file-form.css);
 
 :root {
     --doc-height: 100%;
@@ -57,6 +58,13 @@
     --SmartThemeBlurStrength: calc(var(--blurStrength) * 1px);
     --SmartThemeShadowColor: rgba(0, 0, 0, 0.5);
     --SmartThemeBorderColor: rgba(0, 0, 0, 0.5);
+    --SmartThemeCheckboxBgColorR: 220;
+    --SmartThemeCheckboxBgColorG: 220;
+    --SmartThemeCheckboxBgColorB: 210;
+    --SmartThemeCheckboxTickColorValue: calc(((((var(--SmartThemeCheckboxBgColorR) * 299) + (var(--SmartThemeCheckboxBgColorG) * 587) + (var(--SmartThemeCheckboxBgColorB) * 114)) / 1000) - 128) * -1000);
+    --SmartThemeCheckboxTickColor: rgb(var(--SmartThemeCheckboxTickColorValue),
+            var(--SmartThemeCheckboxTickColorValue),
+            var(--SmartThemeCheckboxTickColorValue));
 
 
     --sheldWidth: 50vw;
@@ -118,6 +126,7 @@ body {
     font-family: "Noto Sans", "Noto Color Emoji", sans-serif;
     font-size: var(--mainFontSize);
     color: var(--SmartThemeBodyColor);
+    overflow: hidden;
 }
 
 ::-webkit-scrollbar {
@@ -126,7 +135,7 @@ body {
 }
 
 .scrollY {
-    overflow-y: auto;
+    overflow-y: auto !important;
 }
 
 ::-webkit-scrollbar-thumb {
@@ -217,7 +226,7 @@ table.responsiveTable {
     color: var(--white50a);
 }
 
-.mes[is_system="true"] .mes_text br {
+.mes[is_system="true"][ch_name="SillyTavern System"] .mes_text br {
     display: none;
 }
 
@@ -305,6 +314,11 @@ table.responsiveTable {
     display: block;
     overflow-x: auto;
     padding: 1em;
+}
+
+.mes_text img:not(.mes_img) {
+    max-width: 100%;
+    max-height: var(--doc-height);
 }
 
 .mes .mes_timer,
@@ -405,13 +419,13 @@ hr {
 }
 
 #bg1 {
-    background-image: url('backgrounds/tavern day.jpg');
-    z-index: -2;
+    background-image: url('backgrounds/__transparent.png');
+    z-index: -3;
 }
 
 #bg_custom {
     background-image: none;
-    z-index: -1;
+    z-index: -2;
 }
 
 /*TOPPER margin*/
@@ -539,7 +553,7 @@ hr {
 /* special case for desktop Safari to allow #sheld resizing */
 @media only screen and (min-width: 1024px) and (-webkit-min-device-pixel-ratio: 2) and (pointer: fine) {
     #form_sheld {
-        margin-bottom: 5px;
+        margin-bottom: 4px;
     }
 }
 
@@ -622,6 +636,7 @@ hr {
     display: none;
     order: 2;
     padding-right: 2px;
+    place-self: center;
 }
 
 #options_button {
@@ -658,6 +673,7 @@ hr {
     backdrop-filter: blur(var(--SmartThemeBlurStrength));
     box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
     flex-flow: column;
+    border-radius: 10px;
 }
 
 .options-content,
@@ -678,6 +694,7 @@ hr {
     display: flex;
     align-items: center;
     justify-content: center;
+    pointer-events: none;
 }
 
 .options-content hr {
@@ -755,6 +772,10 @@ hr {
 .last_mes {
     margin-bottom: 0 !important;
     /*only affects bubblechat to make it sit nicely at the bottom*/
+}
+
+.last_mes .mes_text {
+    padding-right: 30px;
 }
 
 /* SWIPE RELATED STYLES*/
@@ -925,6 +946,7 @@ hr {
     padding-top: 0;
     padding-left: 10px;
     width: 100%;
+    overflow-x: hidden;
 }
 
 .mes_text {
@@ -1129,7 +1151,6 @@ input[type="file"] {
     display: block;
     cursor: pointer;
     text-align: center;
-    padding-right: 20px;
     margin-top: 0;
     filter: grayscale(1) brightness(75%);
     -webkit-transition: all 0.5s ease-in-out;
@@ -1235,10 +1256,6 @@ input[type="file"] {
 
 .bulk_select_checkbox {
     align-self: center;
-}
-
-#rm_print_characters_block.bulk_select .wide100pLess70px {
-    width: calc(100% - 85px);
 }
 
 #rm_print_characters_block .empty_block {
@@ -1433,9 +1450,7 @@ select option:not(:checked) {
     display: block;
 }
 
-#api_button:hover,
-#api_button_novel:hover,
-#api_button_textgenerationwebui:hover {
+.menu_button.api_button:hover {
     background-color: var(--active);
 }
 
@@ -1530,6 +1545,7 @@ input[type=search]:focus::-webkit-search-cancel-button {
     padding: 5px;
     border-radius: 10px;
     cursor: pointer;
+    margin-bottom: 1px;
 }
 
 /*applies to char list and mes_text char display name*/
@@ -1950,6 +1966,7 @@ grammarly-extension {
 .wide_dialogue_popup {
     aspect-ratio: 1 / 1;
     width: unset !important;
+    min-width: var(--sheldWidth);
 }
 
 #bulk_tag_popup_holder,
@@ -2236,7 +2253,7 @@ input[type="checkbox"]:not(#nav-toggle):not(#rm_button_panel_pin):not(#lm_button
     height: 0.65em;
     transform: scale(0);
     transition: 120ms transform ease-in-out;
-    box-shadow: inset 1em 1em var(--SmartThemeBlurTintColor);
+    box-shadow: inset 1em 1em var(--SmartThemeCheckboxTickColor);
     transform-origin: bottom left;
     clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0%, 43% 62%);
 }
@@ -2485,14 +2502,6 @@ input[type="range"]::-webkit-slider-thumb {
     display: none;
 }
 
-.last_mes .mes_buttons {
-    right: -30px;
-}
-
-.last_mes .mes_block {
-    margin-right: 30px;
-}
-
 .mes_buttons .mes_edit,
 .mes_buttons .mes_bookmark,
 .mes_buttons .mes_create_bookmark,
@@ -2502,7 +2511,7 @@ input[type="range"]::-webkit-slider-thumb {
     cursor: pointer;
     transition: 0.3s ease-in-out;
     filter: drop-shadow(0px 0px 2px black);
-    opacity: 0.2;
+    opacity: 0.3;
 }
 
 .mes_buttons .mes_edit:hover,
@@ -2625,7 +2634,7 @@ input[type="range"]::-webkit-slider-thumb {
     max-height: calc(100vh - 84px);
     max-height: calc(100svh - 84px);
     position: absolute;
-    z-index: 3002;
+    z-index: 3000;
     margin-left: auto;
     margin-right: auto;
     left: 0;
@@ -3577,10 +3586,18 @@ a {
 }
 
 .zoomed_avatar {
+    /* Max height with 2/3 aspect ratio */
+    --maxWidth: calc(90vh * 0.666);
+    /* Left gap between the left corner and chat */
+    --leftGapWidth: calc((100vw - var(--sheldWidth)) / 2);
+    /* Left position of the avatar (half of the gap minus half of the avatar width) */
+    --leftPosition: max(0px, calc((var(--leftGapWidth) - var(--maxWidth)) / 2));
     aspect-ratio: 2 / 3;
     padding: 0;
     border: 0;
     background-color: transparent;
+    max-width: var(--maxWidth);
+    left: var(--leftPosition);
 }
 
 .zoomed_avatar img {
@@ -3648,12 +3665,13 @@ a {
 }
 
 .icon-svg {
-    fill: currentColor;
     /* Takes on the color of the surrounding text */
+    fill: currentColor;
     width: auto;
     height: 14px;
-    vertical-align: middle;
+    aspect-ratio: 1;
     /* To align with adjacent text */
+    place-self: center;
 }
 
 .paginationjs {
@@ -3732,11 +3750,15 @@ a {
 
 #show_more_messages {
     text-align: center;
-    margin: 10px 0;
+    margin: 10px auto;
     font-weight: 500;
-    text-decoration: underline;
     order: -1;
     cursor: pointer;
+    padding: 0.5em 1em;
+    background-color: var(--SmartThemeBlurTintColor);
+    width: fit-content;
+    border-radius: 10px;
+    outline: 1px solid var(--SmartThemeBorderColor);
 }
 
 .draggable img {

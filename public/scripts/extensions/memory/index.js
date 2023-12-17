@@ -1,10 +1,10 @@
-import { getStringHash, debounce, waitUntilCondition, extractAllWords } from "../../utils.js";
-import { getContext, getApiUrl, extension_settings, doExtrasFetch, modules } from "../../extensions.js";
-import { eventSource, event_types, extension_prompt_types, generateQuietPrompt, is_send_press, saveSettingsDebounced, substituteParams } from "../../../script.js";
-import { is_group_generating, selected_group } from "../../group-chats.js";
-import { registerSlashCommand } from "../../slash-commands.js";
+import { getStringHash, debounce, waitUntilCondition, extractAllWords } from '../../utils.js';
+import { getContext, getApiUrl, extension_settings, doExtrasFetch, modules } from '../../extensions.js';
+import { animation_duration, eventSource, event_types, extension_prompt_types, generateQuietPrompt, is_send_press, saveSettingsDebounced, substituteParams } from '../../../script.js';
+import { is_group_generating, selected_group } from '../../group-chats.js';
+import { registerSlashCommand } from '../../slash-commands.js';
 import { loadMovingUIState } from '../../power-user.js';
-import { dragElement } from "../../RossAscends-mods.js";
+import { dragElement } from '../../RossAscends-mods.js';
 export { MODULE_NAME };
 
 const MODULE_NAME = '1_memory';
@@ -29,7 +29,7 @@ const formatMemoryValue = function (value) {
     } else {
         return `Summary: ${value}`;
     }
-}
+};
 
 const saveChatDebounced = debounce(() => getContext().saveChat(), 2000);
 
@@ -109,16 +109,21 @@ function loadSettings() {
     $('#memory_depth').val(extension_settings.memory.depth).trigger('input');
     $(`input[name="memory_position"][value="${extension_settings.memory.position}"]`).prop('checked', true).trigger('input');
     $('#memory_prompt_words_force').val(extension_settings.memory.promptForceWords).trigger('input');
+    switchSourceControls(extension_settings.memory.source);
 }
 
 function onSummarySourceChange(event) {
     const value = event.target.value;
     extension_settings.memory.source = value;
+    switchSourceControls(value);
+    saveSettingsDebounced();
+}
+
+function switchSourceControls(value) {
     $('#memory_settings [data-source]').each((_, element) => {
         const source = $(element).data('source');
         $(element).toggle(source === value);
     });
-    saveSettingsDebounced();
 }
 
 function onMemoryShortInput() {
@@ -317,10 +322,15 @@ async function onChatEvent() {
 }
 
 async function forceSummarizeChat() {
+    if (extension_settings.memory.source === summary_sources.extras) {
+        toastr.warning('Force summarization is not supported for Extras API');
+        return;
+    }
+
     const context = getContext();
 
-    const skipWIAN = extension_settings.memory.SkipWIAN
-    console.log(`Skipping WIAN? ${skipWIAN}`)
+    const skipWIAN = extension_settings.memory.SkipWIAN;
+    console.log(`Skipping WIAN? ${skipWIAN}`);
     if (!context.chatId) {
         toastr.warning('No chat selected');
         return;
@@ -336,7 +346,7 @@ async function forceSummarizeChat() {
 }
 
 async function summarizeChat(context) {
-    const skipWIAN = extension_settings.memory.SkipWIAN
+    const skipWIAN = extension_settings.memory.SkipWIAN;
     switch (extension_settings.memory.source) {
         case summary_sources.extras:
             await summarizeChatExtras(context);
@@ -409,7 +419,7 @@ async function summarizeChatMain(context, force, skipWIAN) {
         console.debug('Summarization prompt is empty. Skipping summarization.');
         return;
     }
-    console.log('sending summary prompt')
+    console.log('sending summary prompt');
     const summary = await generateQuietPrompt(prompt, false, skipWIAN);
     const newContext = getContext();
 
@@ -484,8 +494,8 @@ async function summarizeChatExtras(context) {
                     repetition_penalty: extension_settings.memory.repetitionPenalty,
                     temperature: extension_settings.memory.temperature,
                     length_penalty: extension_settings.memory.lengthPenalty,
-                }
-            })
+                },
+            }),
         });
 
         if (apiResult.ok) {
@@ -564,48 +574,48 @@ function setMemoryContext(value, saveToMessage) {
 function doPopout(e) {
     const target = e.target;
     //repurposes the zoomed avatar template to server as a floating div
-    if ($("#summaryExtensionPopout").length === 0) {
-        console.debug('did not see popout yet, creating')
-        const originalHTMLClone = $(target).parent().parent().parent().find('.inline-drawer-content').html()
-        const originalElement = $(target).parent().parent().parent().find('.inline-drawer-content')
+    if ($('#summaryExtensionPopout').length === 0) {
+        console.debug('did not see popout yet, creating');
+        const originalHTMLClone = $(target).parent().parent().parent().find('.inline-drawer-content').html();
+        const originalElement = $(target).parent().parent().parent().find('.inline-drawer-content');
         const template = $('#zoomed_avatar_template').html();
         const controlBarHtml = `<div class="panelControlBar flex-container">
         <div id="summaryExtensionPopoutheader" class="fa-solid fa-grip drag-grabber hoverglow"></div>
         <div id="summaryExtensionPopoutClose" class="fa-solid fa-circle-xmark hoverglow dragClose"></div>
-    </div>`
+    </div>`;
         const newElement = $(template);
         newElement.attr('id', 'summaryExtensionPopout')
             .removeClass('zoomed_avatar')
             .addClass('draggable')
-            .empty()
+            .empty();
         const prevSummaryBoxContents = $('#memory_contents').val(); //copy summary box before emptying
         originalElement.empty();
-        originalElement.html(`<div class="flex-container alignitemscenter justifyCenter wide100p"><small>Currently popped out</small></div>`)
-        newElement.append(controlBarHtml).append(originalHTMLClone)
+        originalElement.html('<div class="flex-container alignitemscenter justifyCenter wide100p"><small>Currently popped out</small></div>');
+        newElement.append(controlBarHtml).append(originalHTMLClone);
         $('body').append(newElement);
-        $("#summaryExtensionDrawerContents").addClass('scrollableInnerFull')
+        $('#summaryExtensionDrawerContents').addClass('scrollableInnerFull');
         setMemoryContext(prevSummaryBoxContents, false); //paste prev summary box contents into popout box
         setupListeners();
         loadSettings();
         loadMovingUIState();
 
-        $("#summaryExtensionPopout").fadeIn(250);
+        $('#summaryExtensionPopout').fadeIn(animation_duration);
         dragElement(newElement);
 
         //setup listener for close button to restore extensions menu
         $('#summaryExtensionPopoutClose').off('click').on('click', function () {
-            $("#summaryExtensionDrawerContents").removeClass('scrollableInnerFull')
-            const summaryPopoutHTML = $("#summaryExtensionDrawerContents")
-            $("#summaryExtensionPopout").fadeOut(250, () => {
+            $('#summaryExtensionDrawerContents').removeClass('scrollableInnerFull');
+            const summaryPopoutHTML = $('#summaryExtensionDrawerContents');
+            $('#summaryExtensionPopout').fadeOut(animation_duration, () => {
                 originalElement.empty();
                 originalElement.html(summaryPopoutHTML);
-                $("#summaryExtensionPopout").remove()
-            })
+                $('#summaryExtensionPopout').remove();
+            });
             loadSettings();
-        })
+        });
     } else {
-        console.debug('saw existing popout, removing')
-        $("#summaryExtensionPopout").fadeOut(250, () => { $("#summaryExtensionPopoutClose").trigger('click') });
+        console.debug('saw existing popout, removing');
+        $('#summaryExtensionPopout').fadeOut(animation_duration, () => { $('#summaryExtensionPopoutClose').trigger('click'); });
     }
 }
 
@@ -629,9 +639,9 @@ function setupListeners() {
     $('#memory_depth').off('click').on('input', onMemoryDepthInput);
     $('input[name="memory_position"]').off('click').on('change', onMemoryPositionChange);
     $('#memory_prompt_words_force').off('click').on('input', onMemoryPromptWordsForceInput);
-    $("#summarySettingsBlockToggle").off('click').on('click', function () {
-        console.log('saw settings button click')
-        $("#summarySettingsBlock").slideToggle(200, "swing"); //toggleClass("hidden");
+    $('#summarySettingsBlockToggle').off('click').on('click', function () {
+        console.log('saw settings button click');
+        $('#summarySettingsBlock').slideToggle(200, 'swing'); //toggleClass("hidden");
     });
 }
 
@@ -659,7 +669,7 @@ jQuery(function () {
 
                         <textarea id="memory_contents" class="text_pole textarea_compact" rows="6" placeholder="Summary will be generated here..."></textarea>
                         <div class="memory_contents_controls">
-                            <div id="memory_force_summarize" class="menu_button menu_button_icon">
+                            <div id="memory_force_summarize" data-source="main" class="menu_button menu_button_icon">
                                 <i class="fa-solid fa-database"></i>
                                 <span>Summarize now</span>
                             </div>
@@ -730,7 +740,7 @@ jQuery(function () {
         `;
         $('#extensions_settings2').append(settingsHtml);
         setupListeners();
-        $("#summaryExtensionPopoutButton").off('click').on('click', function (e) {
+        $('#summaryExtensionPopoutButton').off('click').on('click', function (e) {
             doPopout(e);
             e.stopPropagation();
         });
